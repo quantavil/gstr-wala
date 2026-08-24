@@ -182,3 +182,25 @@ def test_gstr3b_valid_input():
     }
     res = validate_gstr3b_input(data)
     assert res.is_valid is True, f"Errors: {res.errors}"
+
+
+def test_validate_allows_sekhar_notes(tmp_path):
+    import json
+    from scripts.validate_gst_input import validate_file
+    data = {"gstin":"27ABCDE1234F1Z0","fp":"042026","invoices":[{"inum":"INV-1","idt":"10-04-2026","pos":"27","items":[{"txval":10000.0,"rt":18.0,"iamt":0.0,"camt":900.0,"samt":900.0}]}],"sekhar_notes":"client meeting"}
+    p=tmp_path/"ok.json"
+    p.write_text(json.dumps(data))
+    res=validate_file(str(p))
+    assert len([e for e in res.errors if "sekhar_notes" in e.lower()])==0
+
+def test_validate_allows_ctin_and_blocks_password(tmp_path):
+    import json
+    from scripts.validate_gst_input import validate_gstr1_input, validate_file
+    data={"gstin":"27ABCDE1234F1Z0","fp":"042026","invoices":[{"inum":"INV-1","idt":"10-04-2026","pos":"27","ctin":"29ABCDE1234F1ZW","items":[{"txval":100.0,"rt":18.0,"iamt":0.0,"camt":9.0,"samt":9.0}]}]}
+    res=validate_gstr1_input(data)
+    assert res.is_valid
+    data2={"gstin":"27ABCDE1234F1Z0","fp":"042026","invoices":[],"password":"secret123"}
+    p2=tmp_path/"bad.json"
+    p2.write_text(json.dumps(data2))
+    res2=validate_file(str(p2))
+    assert any("password" in e.lower() for e in res2.errors)
