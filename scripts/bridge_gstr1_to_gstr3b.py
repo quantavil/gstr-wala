@@ -19,7 +19,8 @@ import sys
 # Ensure root directory is on sys.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from typing import Any, Dict, List, Optional
+from typing import Any
+
 from scripts.constants import DRC_01B_AMT, DRC_01B_PCT, DRC_01C_AMT, DRC_01C_PCT
 from scripts.gst_engine import compute_gstr1_tables
 from scripts.utils import round_cur
@@ -39,18 +40,17 @@ def derive_gstr3b_due_date(ret_period: str) -> str:
 
 
 def bridge_gstr1_and_2b_to_3b(
-    gstr1_data: Dict[str, Any],
-    recon_data: Optional[Dict[str, Any]] = None,
-    due_date: Optional[str] = None,
-    filing_date: Optional[str] = None,
+    gstr1_data: dict[str, Any],
+    recon_data: dict[str, Any] | None = None,
+    due_date: str | None = None,
+    filing_date: str | None = None,
     turnover_slab: str = "upto_1.5cr",
-    opening_credit_ledger: Optional[Dict[str, float]] = None,
-    opening_cash_ledger: Optional[Dict[str, float]] = None
-) -> Dict[str, Any]:
+    opening_credit_ledger: dict[str, float] | None = None,
+    opening_cash_ledger: dict[str, float] | None = None
+) -> dict[str, Any]:
     """Synthesizes complete GSTR-3B input from GSTR-1 and GSTR-2B reconciliation."""
     g1_res = compute_gstr1_tables(gstr1_data)
     gstin = g1_res["gstin"]
-    supplier_state = gstin[:2]
     ret_period = g1_res["fp"]
     computed_due_date = due_date or derive_gstr3b_due_date(ret_period)
     computed_filing_date = filing_date or computed_due_date
@@ -266,7 +266,7 @@ def bridge_gstr1_and_2b_to_3b(
     return gstr3b_input
 
 
-def check_drc_mismatch_risks(gstr1_summary: Dict[str, Any], gstr3b_data: Dict[str, Any], gstr2b_total_itc: float) -> Dict[str, Any]:
+def check_drc_mismatch_risks(gstr1_summary: dict[str, Any], gstr3b_data: dict[str, Any], gstr2b_total_itc: float) -> dict[str, Any]:
     """Evaluates DRC-01B (Rule 88C) and DRC-01C (Rule 88D) pre-emptive audit risk."""
     g1_tax = gstr1_summary.get("total_tax", 0.0)
 
@@ -320,14 +320,31 @@ def check_drc_mismatch_risks(gstr1_summary: Dict[str, Any], gstr3b_data: Dict[st
     }
 
 
-def main():
-    if len(sys.argv) < 2:
-        print("Usage: python3 gstr1_to_3b_bridge.py <gstr1_input.json> [reconciliation.json] [output_3b.json]")
-        sys.exit(1)
+def main() -> None:
+    import argparse
 
-    g1_file = sys.argv[1]
-    recon_file = sys.argv[2] if len(sys.argv) > 2 and sys.argv[2].endswith(".json") and sys.argv[2] != "output_3b.json" else None
-    out_file = sys.argv[3] if len(sys.argv) > 3 else "gstr3b_input.json"
+    parser = argparse.ArgumentParser(description="Auto-populate GSTR-3B from GSTR-1 and GSTR-2B reconciliation")
+    parser.add_argument("g1_input", help="Path to GSTR-1 Input JSON")
+    parser.add_argument("pos_args", nargs="*", help="Optional [recon_input] [output_3b]")
+    parser.add_argument("--recon", dest="recon_opt", default=None, help="Explicit path to reconciliation JSON")
+    parser.add_argument("-o", "--output", dest="out_opt", default=None, help="Explicit path to output GSTR-3B JSON")
+
+    args = parser.parse_args()
+
+    g1_file = args.g1_input
+    recon_file = args.recon_opt
+    out_file = args.out_opt or "gstr3b_input.json"
+
+    if args.pos_args:
+        if len(args.pos_args) == 1:
+            arg0 = args.pos_args[0]
+            if not recon_file and ("recon" in arg0.lower() or (os.path.exists(arg0) and "3b" not in arg0.lower())):
+                recon_file = arg0
+            else:
+                out_file = arg0
+        elif len(args.pos_args) >= 2:
+            recon_file = args.pos_args[0] if not recon_file else recon_file
+            out_file = args.pos_args[1]
 
     with open(g1_file, "r", encoding="utf-8") as f:
         g1_data = json.load(f)
@@ -342,8 +359,11 @@ def main():
     with open(out_file, "w", encoding="utf-8") as f:
         json.dump(g3b_input, f, indent=2)
 
+    all_other = g3b_input.get("itc", {}).get("available", {}).get("all_other", {})
+    tot_itc = float(all_other.get("iamt", 0.0)) + float(all_other.get("camt", 0.0)) + float(all_other.get("samt", 0.0)) + float(all_other.get("csamt", 0.0))
+
     print(f"SUCCESS: Auto-populated GSTR-3B input -> '{out_file}'")
-    print(f"Taxable: ₹{g3b_input['outward_supplies']['taxable']['txval']:,.2f}, Total ITC: ₹{g3b_input['itc']['available']['all_other']}")
+    print(f"Taxable: ₹{g3b_input['outward_supplies']['taxable']['txval']:,.2f}, Total ITC: ₹{tot_itc:,.2f}")
 
 
 if __name__ == "__main__":

@@ -1,9 +1,14 @@
 """Pytest suite for Pydantic v2 models and unified CLI / Filing pack generator."""
 
 import os
+
 import pytest
-from scripts.models import GSTR1Input, GSTR3BInput
-from scripts.generate_filing_pack import generate_gstr1_filing_pack, generate_gstr3b_filing_pack
+
+from scripts.generate_filing_pack import (
+    generate_gstr1_filing_pack,
+    generate_gstr3b_filing_pack,
+)
+from scripts.models import GSTR1Input
 
 
 def test_pydantic_gstr1_model():
@@ -26,13 +31,16 @@ def test_pydantic_gstr1_model():
     assert model.invoices[0].items[0].txval == 1000.0
 
 
+from pydantic import ValidationError
+
+
 def test_pydantic_invalid_gstin_raises():
     invalid_data = {
         "gstin": "INVALID_GSTIN_123",
         "fp": "042026",
         "invoices": []
     }
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         GSTR1Input(**invalid_data)
 
 
@@ -71,8 +79,8 @@ def test_generate_filing_pack_markdown(tmp_path):
 
 def test_parse_csv_sales_and_purchases():
     """Verify that sample CSV sales and purchase registers parse accurately."""
-    from scripts.parse_sales_register import parse_csv_sales
     from scripts.parse_purchase_register import parse_csv_purchases
+    from scripts.parse_sales_register import parse_csv_sales
 
     repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
     sales_csv = os.path.join(repo_root, "examples", "sample_sales_register.csv")

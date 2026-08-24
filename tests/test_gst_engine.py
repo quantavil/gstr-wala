@@ -3,6 +3,7 @@
 import copy
 
 import pytest
+
 from scripts.gst_engine import (
     compute,
     compute_gstr1_tables,
@@ -68,13 +69,16 @@ def test_b2b_vs_b2cl_vs_b2cs_splitting():
 
 
 def test_statutory_interest_on_delay():
+    from scripts.constants import get_interest_rate_50_1
     res = compute_statutory_interest(
         net_cash_liability=100000.0,
         due_date_str="20-05-2026",
         filing_date_str="19-06-2026"
     )
+    rate = get_interest_rate_50_1()
+    expected = round(100000.0 * (rate / 365.0) * 30, 2)
     assert res["delay_days"] == 30
-    assert pytest.approx(res["interest_amount"], 0.01) == 1479.45
+    assert pytest.approx(res["interest_amount"], 0.01) == expected
 
 
 def test_statutory_interest_on_time_is_zero():

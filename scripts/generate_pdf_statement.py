@@ -16,8 +16,10 @@ import sys
 # Ensure root directory is on sys.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from typing import Any, Dict
+from typing import Any
+
 from jinja2 import Environment
+
 from scripts.itc_optimizer import optimize_from_input_dict
 
 HTML_TEMPLATE_GSTR3B = """
@@ -205,7 +207,7 @@ HTML_TEMPLATE_GSTR3B = """
 """
 
 
-def generate_pdf(g3b_data: Dict[str, Any], output_pdf_path: str) -> bool:
+def generate_pdf(g3b_data: dict[str, Any], output_pdf_path: str) -> bool:
     """Renders HTML via Jinja2 and converts to PDF via WeasyPrint."""
     opt = optimize_from_input_dict(g3b_data)
     m = opt["setoff_matrix"]
@@ -219,7 +221,6 @@ def generate_pdf(g3b_data: Dict[str, Any], output_pdf_path: str) -> bool:
     rcm = outward.get("rcm_inward", sup_det.get("isup_rev", {}))
 
     itc = g3b_data.get("itc", {})
-    itc_elg = g3b_data.get("itc_elg", {})
     avail = itc.get("available", {}).get("all_other", {})
     rev = itc.get("reversed", {}).get("permanent_17_5_rules", {})
 
@@ -238,8 +239,8 @@ def generate_pdf(g3b_data: Dict[str, Any], output_pdf_path: str) -> bool:
     rendered_html = template.render(
         gstin=g3b_data.get("gstin", ""),
         ret_period=g3b_data.get("ret_period", ""),
-        due_date=g3b_data.get("due_date", "20-05-2026"),
-        filing_date=g3b_data.get("filing_date", "20-05-2026"),
+        due_date=g3b_data.get("due_date") or "—",
+        filing_date=g3b_data.get("filing_date") or "—",
         t_txval=float(taxable.get("txval", 0.0)),
         t_iamt=float(taxable.get("iamt", 0.0)),
         t_camt=float(taxable.get("camt", 0.0)),
@@ -270,7 +271,7 @@ def generate_pdf(g3b_data: Dict[str, Any], output_pdf_path: str) -> bool:
     )
 
     html_path = output_pdf_path.replace(".pdf", ".html")
-    os.makedirs(os.path.dirname(output_pdf_path), exist_ok=True)
+    os.makedirs(os.path.dirname(output_pdf_path) or ".", exist_ok=True)
     with open(html_path, "w", encoding="utf-8") as f:
         f.write(rendered_html)
 
@@ -279,7 +280,7 @@ def generate_pdf(g3b_data: Dict[str, Any], output_pdf_path: str) -> bool:
         HTML(string=rendered_html).write_pdf(output_pdf_path)
         print(f"SUCCESS: Generated PDF Filing Statement -> '{output_pdf_path}'")
         return True
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         print(f"Notice: Saved HTML statement -> '{html_path}' (Weasyprint note: {e})")
         return False
 

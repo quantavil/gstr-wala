@@ -3,8 +3,9 @@
   "title": "GSTR1PortalSchema",
   "description": "GSTN Official Offline Return Schema for GSTR-1",
   "type": "object",
-  "required": ["gstin", "fp"],
+  "required": ["version", "gstin", "fp"],
   "properties": {
+    "version": { "type": "string" },
     "gstin": { "type": "string" },
     "fp": { "type": "string" },
     "gt": { "type": "number" },

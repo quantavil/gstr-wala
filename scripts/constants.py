@@ -1,17 +1,30 @@
-"""Centralized statutory rules, thresholds, and regex patterns for Indian GST compliance."""
+"""Centralized statutory rules, thresholds, and regex patterns for Indian GST compliance.
+
+Note:
+  - `section_50_3_wrong_avail_utilized_p_a` (24% p.a.) is DECLARED-BUT-UNUSED in current
+    statutory calculators; Section 50(1) (18% p.a.) on net cash tax liability is enforced.
+"""
 
 import json
 import os
 import re
+import warnings
+from typing import Any
 
 _MANIFEST_PATH = os.path.join(os.path.dirname(__file__), "..", "config", "rules_manifest.json")
 
 
-def _load_manifest():
+def _load_manifest() -> dict[str, Any]:
     try:
         with open(_MANIFEST_PATH, encoding="utf-8") as f:
             return json.load(f)
-    except Exception:
+    except (OSError, json.JSONDecodeError, ValueError) as e:
+        warnings.warn(
+            f"Could not load statutory rules manifest from {_MANIFEST_PATH}: {e}. "
+            "Falling back to embedded statutory defaults.",
+            UserWarning,
+            stacklevel=2,
+        )
         return {}
 
 
@@ -57,3 +70,66 @@ PERIOD_REGEX = re.compile(r"^(0[1-9]|1[0-2])20[2-9][0-9]$")
 
 # Base-36 Character set for Mod-36 GSTIN Checksum
 CHAR_SET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
+
+def compute_gstin_checksum(gstin14: str) -> str:
+    """Computes the 15th check digit for a 14-character GSTIN string using Mod-36."""
+    factor = 1
+    total = 0
+    for char in gstin14:
+        if char not in CHAR_SET:
+            raise ValueError(f"Invalid character {char!r} in GSTIN '{gstin14}': not in CHAR_SET")
+        code_point = CHAR_SET.index(char)
+        addend = factor * code_point
+        factor = 1 if factor == 2 else 2
+        addend = (addend // 36) + (addend % 36)
+        total += addend
+    remainder = total % 36
+    check_code = (36 - remainder) % 36
+    return CHAR_SET[check_code]
+
+
+def detect_return_type(data: dict[str, Any]) -> str:
+    """Determines whether a payload is GSTR-1 or GSTR-3B using explicit key or structural inference."""
+    if not isinstance(data, dict):
+        raise TypeError("Payload must be a dictionary")
+    if "return_type" in data:
+        rt = str(data["return_type"]).strip().upper()
+        if rt in ("GSTR-1", "GSTR1"):
+            return "GSTR-1"
+        if rt in ("GSTR-3B", "GSTR3B"):
+            return "GSTR-3B"
+        raise ValueError(f"Invalid return_type: {data['return_type']!r}. Expected 'GSTR-1' or 'GSTR-3B'.")
+
+    has_gstr1 = "invoices" in data or "fp" in data
+    has_gstr3b = "ret_period" in data or "outward_supplies" in data
+
+    if has_gstr1 and has_gstr3b:
+        raise ValueError("ambiguous payload: contains both GSTR-1 and GSTR-3B keys; set return_type explicitly")
+    if has_gstr1:
+        return "GSTR-1"
+    if has_gstr3b:
+        return "GSTR-3B"
+    raise ValueError("Unable to determine return type: payload matches neither GSTR-1 nor GSTR-3B structure.")
+
+
+def get_interest_rate_50_1() -> float:
+    """Returns Section 50(1) annual interest rate on net cash liability (e.g. 0.18 for 18% p.a.)."""
+    m = _load_manifest()
+    return float(m.get("statutory_rules", {}).get("interest_rates", {}).get("section_50_1_net_cash_p_a", 0.18))
+
+
+def get_late_fee_caps() -> dict[str, float]:
+    """Returns Section 47 statutory late fee rates and caps dictionary."""
+    m = _load_manifest()
+    caps = m.get("statutory_rules", {}).get("late_fee_caps", {})
+    return {
+        "nil_return_daily_cgst": float(caps.get("nil_return_daily_cgst", 10.0)),
+        "nil_return_daily_sgst": float(caps.get("nil_return_daily_sgst", 10.0)),
+        "nil_return_max_cap_total": float(caps.get("nil_return_max_cap_total", 500.0)),
+        "upto_1.5cr_daily_cgst": float(caps.get("upto_1.5cr_daily_cgst", 25.0)),
+        "upto_1.5cr_daily_sgst": float(caps.get("upto_1.5cr_daily_sgst", 25.0)),
+        "upto_1.5cr_max_cap_total": float(caps.get("upto_1.5cr_max_cap_total", 2000.0)),
+        "slab_1.5cr_to_5cr_max_cap_total": float(caps.get("slab_1.5cr_to_5cr_max_cap_total", 5000.0)),
+        "above_5cr_max_cap_total": float(caps.get("above_5cr_max_cap_total", 10000.0)),
+    }

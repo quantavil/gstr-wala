@@ -1,6 +1,5 @@
 """Pytest test suite for validate_gst_input.py."""
 
-import pytest
 from scripts.validate_gst_input import (
     compute_gstin_checksum,
     is_valid_gstin,
@@ -42,7 +41,7 @@ def test_gstin_obsolete_state_codes_rejected():
     assert "Invalid State Code '28'" in err_28
 
     # State 26 (Merged DNH & DD) must be valid
-    valid_26, err_26 = is_valid_gstin(f"26AAAAA0000A1Z{compute_gstin_checksum('26AAAAA0000A1Z')}")
+    valid_26, _err_26 = is_valid_gstin(f"26AAAAA0000A1Z{compute_gstin_checksum('26AAAAA0000A1Z')}")
     assert valid_26 is True
 
 
@@ -186,6 +185,7 @@ def test_gstr3b_valid_input():
 
 def test_validate_allows_sekhar_notes(tmp_path):
     import json
+
     from scripts.validate_gst_input import validate_file
     data = {"gstin":"27ABCDE1234F1Z0","fp":"042026","invoices":[{"inum":"INV-1","idt":"10-04-2026","pos":"27","items":[{"txval":10000.0,"rt":18.0,"iamt":0.0,"camt":900.0,"samt":900.0}]}],"sekhar_notes":"client meeting"}
     p=tmp_path/"ok.json"
@@ -195,7 +195,8 @@ def test_validate_allows_sekhar_notes(tmp_path):
 
 def test_validate_allows_ctin_and_blocks_password(tmp_path):
     import json
-    from scripts.validate_gst_input import validate_gstr1_input, validate_file
+
+    from scripts.validate_gst_input import validate_file, validate_gstr1_input
     data={"gstin":"27ABCDE1234F1Z0","fp":"042026","invoices":[{"inum":"INV-1","idt":"10-04-2026","pos":"27","ctin":"29ABCDE1234F1ZW","items":[{"txval":100.0,"rt":18.0,"iamt":0.0,"camt":9.0,"samt":9.0}]}]}
     res=validate_gstr1_input(data)
     assert res.is_valid

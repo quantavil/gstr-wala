@@ -1,17 +1,16 @@
 """Pytest suite for Real-World SME Business Scenarios."""
 
 import os
-import pytest
-from scripts.parse_sales_register import parse_csv_sales
-from scripts.parse_purchase_register import parse_csv_purchases
-from scripts.gst_engine import compute_gstr1_tables, compute_statutory_interest, compute_statutory_late_fee
+
+from scripts.gst_engine import (
+    compute_gstr1_tables,
+    compute_statutory_interest,
+    compute_statutory_late_fee,
+)
 from scripts.itc_optimizer import optimize_setoff
+from scripts.parse_purchase_register import parse_csv_purchases
+from scripts.parse_sales_register import parse_csv_sales
 from scripts.reconcile_gstr2b import reconcile
-from scripts.bridge_gstr1_to_gstr3b import bridge_gstr1_and_2b_to_3b, check_drc_mismatch_risks
-
-from scripts.generate_gstr1_json import generate_portal_gstr1
-from scripts.generate_gstr3b_json import generate_portal_gstr3b
-
 
 FIXTURES_DIR = os.path.join(os.path.dirname(__file__), "fixtures")
 
@@ -128,10 +127,12 @@ def test_scenario_d_vendor_defaults_and_reversals():
 def test_scenario_e_belated_filing_interest_and_late_fees():
     """Scenario E: Belated return 45 days late with Section 50 interest on Net Cash and Section 47 caps."""
     # Net cash liability of ₹1,00,000 paid 45 days late (Due 20-05-2026, Filed 04-07-2026)
+    from scripts.constants import get_interest_rate_50_1
     intr = compute_statutory_interest(net_cash_liability=100000.0, due_date_str="20-05-2026", filing_date_str="04-07-2026")
-    # Expected: 100000 * (0.18 / 365) * 45 = 2219.18
+    rate = get_interest_rate_50_1()
+    expected_interest = round(100000.0 * (rate / 365.0) * 45, 2)
     assert intr["delay_days"] == 45
-    assert intr["interest_amount"] == 2219.18
+    assert intr["interest_amount"] == expected_interest
 
     # Turnover <= 1.5 Cr: ₹50/day capped at ₹2,000
     lf = compute_statutory_late_fee(is_nil_return=False, turnover_slab="upto_1.5cr", due_date_str="20-05-2026", filing_date_str="04-07-2026")

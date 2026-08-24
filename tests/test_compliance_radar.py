@@ -2,10 +2,17 @@
 
 import json
 import os
+
 import pytest
+
+from scripts.bridge_gstr1_to_gstr3b import check_drc_mismatch_risks
 from scripts.compliance_radar import load_rules_manifest
 from scripts.constants import B2CL_THRESHOLD, VALID_RATES
-from scripts.bridge_gstr1_to_gstr3b import check_drc_mismatch_risks
+
+pytestmark = pytest.mark.skipif(
+    os.environ.get("GSTR_WALA_SELF_VERIFY") == "1",
+    reason="Radar self-verification running in child process",
+)
 
 
 def test_rules_manifest_structure():
@@ -29,8 +36,9 @@ def test_constants_match_manifest():
 
 
 def test_patch_rejects_nested_injection(tmp_path):
-    from scripts.compliance_radar import apply_compliance_patch
     import json
+
+    from scripts.compliance_radar import apply_compliance_patch
 
     patch2 = {"patch_id": "Y", "statutory_rules": {"interest_rates": {"section_50_1_net_cash_p_a": 0.99}}}
     pf2 = tmp_path / "patch2.json"
@@ -50,7 +58,7 @@ def test_patch_rejects_nested_injection(tmp_path):
 
 def test_drc_uses_manifest_not_hardcode():
     # patch manifest in memory by monkeypatching constants values? Instead test current thresholds are those from manifest by importing them
-    from scripts.constants import DRC_01B_PCT, DRC_01B_AMT, DRC_01C_PCT, DRC_01C_AMT
+    from scripts.constants import DRC_01B_AMT, DRC_01B_PCT, DRC_01C_AMT, DRC_01C_PCT
 
     with open("config/rules_manifest.json") as f:
         m = json.load(f)

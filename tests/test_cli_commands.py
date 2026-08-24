@@ -1,8 +1,10 @@
 """Pytest suite verifying all Typer CLI commands via CliRunner."""
 
 import os
+
 import pytest
 from typer.testing import CliRunner
+
 from scripts.cli import app
 
 runner = CliRunner()

@@ -24,7 +24,8 @@ import sys
 # Ensure root directory is on sys.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from typing import Any, Dict, List
+from typing import Any
+
 from scripts.gst_engine import compute_gstr1_tables, round_cur
 from scripts.validate_gst_input import validate_gstr1_input
 
@@ -45,7 +46,7 @@ DOC_NUM_NAMES = {
 }
 
 
-def generate_portal_gstr1(input_data: Dict[str, Any]) -> Dict[str, Any]:
+def generate_portal_gstr1(input_data: dict[str, Any]) -> dict[str, Any]:
     """Transforms canonical input data into official GSTN GSTR-1 offline JSON."""
     comp = compute_gstr1_tables(input_data)
 
@@ -55,7 +56,7 @@ def generate_portal_gstr1(input_data: Dict[str, Any]) -> Dict[str, Any]:
     cur_gt = float(input_data.get("cur_gt", 0.0))
 
     # 1. Format B2B (Group by ctin)
-    b2b_by_ctin: Dict[str, List[Dict[str, Any]]] = {}
+    b2b_by_ctin: dict[str, list[dict[str, Any]]] = {}
     for inv in comp["table_4_b2b"]:
         ctin = inv.get("ctin", "").strip().upper()
         if ctin not in b2b_by_ctin:
@@ -88,7 +89,7 @@ def generate_portal_gstr1(input_data: Dict[str, Any]) -> Dict[str, Any]:
     b2b_payload = [{"ctin": ctin, "inv": invs} for ctin, invs in sorted(b2b_by_ctin.items())]
 
     # 2. Format B2CL (Group by pos)
-    b2cl_by_pos: Dict[str, List[Dict[str, Any]]] = {}
+    b2cl_by_pos: dict[str, list[dict[str, Any]]] = {}
     for inv in comp["table_5_b2cl"]:
         pos = inv.get("pos", "")
         if pos not in b2cl_by_pos:
@@ -134,8 +135,8 @@ def generate_portal_gstr1(input_data: Dict[str, Any]) -> Dict[str, Any]:
         b2cs_payload.append(entry)
 
     # 4. Format CDNR (Registered Credit/Debit Notes grouped by ctin)
-    cdnr_by_ctin: Dict[str, List[Dict[str, Any]]] = {}
-    cdnur_payload: List[Dict[str, Any]] = []
+    cdnr_by_ctin: dict[str, list[dict[str, Any]]] = {}
+    cdnur_payload: list[dict[str, Any]] = []
 
     for note in input_data.get("credit_debit_notes", []):
         ctin = note.get("ctin")
@@ -186,7 +187,7 @@ def generate_portal_gstr1(input_data: Dict[str, Any]) -> Dict[str, Any]:
     # 5. Format Exports (Table 6A) — group by exp_typ per portal spec
     from collections import defaultdict
 
-    exp_by_typ: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+    exp_by_typ: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for exp_inv in comp["table_6_exp"]:
         exp_by_typ[exp_inv.get("exp_typ", "WOPAY")].append(exp_inv)
     exp_payload = []
@@ -272,6 +273,7 @@ def generate_portal_gstr1(input_data: Dict[str, Any]) -> Dict[str, Any]:
 
     # Complete Official GSTN JSON Schema
     return {
+        "version": "gstr-wala-gstr1-1.0",
         "gstin": gstin,
         "fp": fp,
         "gt": gt,

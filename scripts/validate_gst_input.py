@@ -17,43 +17,25 @@ Usage:
 
 import json
 import os
-import re
 import sys
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 # Ensure root directory is on sys.path for standalone script invocation
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from scripts.constants import (
     B2CL_THRESHOLD,
-    CHAR_SET,
     DATE_REGEX,
     GSTIN_REGEX,
     PERIOD_REGEX,
     STATE_CODES,
     VALID_RATES,
+    compute_gstin_checksum,
+    detect_return_type,
 )
 
-if sys.version_info < (3, 12):
-    sys.exit(f"gstr-wala requires Python 3.12+ (found {sys.version_info.major}.{sys.version_info.minor})")
 
-
-def compute_gstin_checksum(gstin14: str) -> str:
-    """Computes the 15th check digit for a 14-character GSTIN string using Mod-36."""
-    factor = 1
-    total = 0
-    for char in gstin14:
-        code_point = CHAR_SET.index(char)
-        addend = factor * code_point
-        factor = 1 if factor == 2 else 2
-        addend = (addend // 36) + (addend % 36)
-        total += addend
-    remainder = total % 36
-    check_code = (36 - remainder) % 36
-    return CHAR_SET[check_code]
-
-
-def is_valid_gstin(gstin: str) -> Tuple[bool, Optional[str]]:
+def is_valid_gstin(gstin: str) -> tuple[bool, str | None]:
     """Validates GSTIN regex and checksum."""
     if not isinstance(gstin, str):
         return False, "GSTIN must be a string"
@@ -73,8 +55,8 @@ def is_valid_gstin(gstin: str) -> Tuple[bool, Optional[str]]:
 
 class ValidationResult:
     def __init__(self) -> None:
-        self.errors: List[str] = []
-        self.warnings: List[str] = []
+        self.errors: list[str] = []
+        self.warnings: list[str] = []
 
     def error(self, msg: str) -> None:
         self.errors.append(msg)
@@ -86,7 +68,7 @@ class ValidationResult:
     def is_valid(self) -> bool:
         return len(self.errors) == 0
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "valid": self.is_valid,
             "errors": self.errors,
@@ -96,7 +78,7 @@ class ValidationResult:
         }
 
 
-def validate_gstr1_input(data: Dict[str, Any]) -> ValidationResult:
+def validate_gstr1_input(data: dict[str, Any]) -> ValidationResult:
     """Validates canonical GSTR-1 input JSON."""
     result = ValidationResult()
 
@@ -142,7 +124,7 @@ def validate_gstr1_input(data: Dict[str, Any]) -> ValidationResult:
             try:
                 from datetime import datetime
 
-                datetime.strptime(idt, "%d-%m-%Y")
+                datetime.strptime(idt, "%d-%m-%Y")  # noqa: DTZ007
             except ValueError:
                 result.error(f"{prefix}: Invalid calendar date '{idt}'")
 
@@ -171,6 +153,7 @@ def validate_gstr1_input(data: Dict[str, Any]) -> ValidationResult:
         for item_idx, itm in enumerate(items):
             item_pfx = f"{prefix} Item #{item_idx + 1}"
             import math
+
             from scripts.utils import safe_float as _sf
 
             txval = _sf(itm.get("txval", 0.0), default=float("nan"))
@@ -191,7 +174,7 @@ def validate_gstr1_input(data: Dict[str, Any]) -> ValidationResult:
             if iamt < 0 or camt < 0 or samt < 0 or csamt < 0:
                 result.error(f"{item_pfx}: tax amounts cannot be negative (iamt={iamt}, camt={camt}, samt={samt}, csamt={csamt})")
             if float(rt) not in VALID_RATES:
-                result.error(f"{item_pfx}: Invalid GST rate '{rt}%'. Allowed rates: {sorted(list(VALID_RATES))}")
+                result.error(f"{item_pfx}: Invalid GST rate '{rt}%'. Allowed rates: {sorted(VALID_RATES)}")
 
             # Inter-state vs Intra-state tax allocation check
             if is_interstate:
@@ -223,9 +206,8 @@ def validate_gstr1_input(data: Dict[str, Any]) -> ValidationResult:
             calc_inv_val += (txval + iamt + camt + samt + csamt)
 
         inv_val = inv.get("val")
-        if inv_val is not None:
-            if abs(inv_val - calc_inv_val) > 2.0:
-                result.warn(f"{prefix}: Total invoice value ₹{inv_val} deviates from sum of items ₹{round(calc_inv_val, 2)}")
+        if inv_val is not None and abs(inv_val - calc_inv_val) > 2.0:
+            result.warn(f"{prefix}: Total invoice value ₹{inv_val} deviates from sum of items ₹{round(calc_inv_val, 2)}")
 
         # B2CL threshold check
         if not is_b2b and is_interstate:
@@ -242,7 +224,7 @@ def validate_gstr1_input(data: Dict[str, Any]) -> ValidationResult:
     return result
 
 
-def validate_gstr3b_input(data: Dict[str, Any]) -> ValidationResult:
+def validate_gstr3b_input(data: dict[str, Any]) -> ValidationResult:
     """Validates canonical GSTR-3B input JSON."""
     result = ValidationResult()
 
@@ -260,14 +242,14 @@ def validate_gstr3b_input(data: Dict[str, Any]) -> ValidationResult:
 
     # Dates — calendar validation extra
     for dt_field in ["due_date", "filing_date"]:
-        if dt_field in data and data[dt_field]:
+        if data.get(dt_field):
             if not DATE_REGEX.match(data[dt_field]):
                 result.error(f"Invalid '{dt_field}' date '{data[dt_field]}'. Expected DD-MM-YYYY.")
             else:
                 try:
                     from datetime import datetime
 
-                    datetime.strptime(data[dt_field], "%d-%m-%Y")
+                    datetime.strptime(data[dt_field], "%d-%m-%Y")  # noqa: DTZ007
                 except ValueError:
                     result.error(f"Invalid calendar date for '{dt_field}': '{data[dt_field]}'")
 
@@ -302,24 +284,11 @@ def validate_gstr3b_input(data: Dict[str, Any]) -> ValidationResult:
     return result
 
 
-def validate_file(file_path: str) -> ValidationResult:
-    """Detects return type and runs validation."""
-    if not os.path.exists(file_path):
-        res = ValidationResult()
-        res.error(f"File not found: '{file_path}'")
-        return res
-
-    try:
-        with open(file_path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-    except Exception as e:
-        res = ValidationResult()
-        res.error(f"JSON Parse Error in '{file_path}': {str(e)}")
-        return res
-
+def validate_gst_payload(data: dict[str, Any]) -> ValidationResult:
+    """Validates an in-memory GST payload (GSTR-1 or GSTR-3B) with credential safety checks."""
     if not isinstance(data, dict):
         res = ValidationResult()
-        res.error(f"Root element must be a JSON object in '{file_path}'")
+        res.error("Root element must be a JSON object")
         return res
 
     # Check for accidental credential leaks — recursive key scan
@@ -344,14 +313,35 @@ def validate_file(file_path: str) -> ValidationResult:
                 res.error(f"Security Alert: Sensitive field '{k}' contains blocked substring '{blk}'. Remove credentials before validation.")
                 return res
 
-    if "invoices" in data or "fp" in data:
-        return validate_gstr1_input(data)
-    elif "ret_period" in data or "outward_supplies" in data or "itc" in data:
-        return validate_gstr3b_input(data)
-    else:
+    try:
+        ret_type = detect_return_type(data)
+    except ValueError as e:
         res = ValidationResult()
-        res.error("Unrecognized GST input format. Must contain either 'invoices' (GSTR-1) or 'outward_supplies' / 'itc' (GSTR-3B).")
+        res.error(str(e))
         return res
+
+    if ret_type == "GSTR-1":
+        return validate_gstr1_input(data)
+    else:
+        return validate_gstr3b_input(data)
+
+
+def validate_file(file_path: str) -> ValidationResult:
+    """Reads JSON from file and runs validation."""
+    if not os.path.exists(file_path):
+        res = ValidationResult()
+        res.error(f"File not found: '{file_path}'")
+        return res
+
+    try:
+        with open(file_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, json.JSONDecodeError) as e:
+        res = ValidationResult()
+        res.error(f"JSON Parse Error in '{file_path}': {e!s}")
+        return res
+
+    return validate_gst_payload(data)
 
 
 def main():

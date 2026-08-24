@@ -13,16 +13,37 @@ Usage:
 import json
 import os
 import sys
+from typing import Any
 
 # Ensure root directory is on sys.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from typing import Any, Dict, List
+import jsonschema
+
 from scripts.gst_engine import compute_gstr1_tables, format_table
 from scripts.itc_optimizer import optimize_from_input_dict
 
 
-def generate_gstr1_filing_pack(g1_data: Dict[str, Any], output_path: str):
+def validate_against_schema(payload: dict[str, Any], schema_path: str) -> list[str]:
+    """Validates JSON payload against JSON Schema and returns error messages without throwing."""
+    if not os.path.exists(schema_path):
+        return [f"Schema file not found: '{schema_path}'"]
+
+    try:
+        with open(schema_path, "r", encoding="utf-8") as f:
+            schema = json.load(f)
+    except (OSError, json.JSONDecodeError) as e:
+        return [f"Failed to read schema '{schema_path}': {e}"]
+
+    validator = jsonschema.Draft7Validator(schema)
+    errors = []
+    for err in sorted(validator.iter_errors(payload), key=lambda e: list(e.path)):
+        loc = " -> ".join(str(p) for p in err.path) if err.path else "root"
+        errors.append(f"[{loc}] {err.message}")
+    return errors
+
+
+def generate_gstr1_filing_pack(g1_data: dict[str, Any], output_path: str) -> None:
     """Generates human-readable, audit-ready GSTR-1 filing pack."""
     comp = compute_gstr1_tables(g1_data)
     s = comp["summary"]
@@ -58,6 +79,7 @@ def generate_gstr1_filing_pack(g1_data: Dict[str, Any], output_path: str):
 
     lines.extend([
         "",
+        "",
         "## 3. Table 13: Documents Summary Trail",
         ""
     ])
@@ -69,12 +91,12 @@ def generate_gstr1_filing_pack(g1_data: Dict[str, Any], output_path: str):
         ]
         lines.append(format_table(["Doc Type No.", "From Serial", "To Serial", "Total Issued", "Cancelled", "Net Issued"], doc_rows))
 
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
     with open(output_path, "w", encoding="utf-8") as f:
         f.write("\n".join(lines) + "\n")
 
 
-def generate_gstr3b_filing_pack(g3b_data: Dict[str, Any], output_path: str):
+def generate_gstr3b_filing_pack(g3b_data: dict[str, Any], output_path: str) -> None:
     """Generates human-readable, audit-ready GSTR-3B filing pack."""
     opt = optimize_from_input_dict(g3b_data)
     m = opt["setoff_matrix"]
@@ -110,6 +132,7 @@ def generate_gstr3b_filing_pack(g3b_data: Dict[str, Any], output_path: str):
             ["Schedule", "IGST (₹)", "CGST (₹)", "SGST (₹)", "Cess (₹)"],
             [
                 ["4(A)(1) Import of Goods", f"{float(avail.get('import_goods',{}).get('iamt',0)):,.2f}", "-", "-", f"{float(avail.get('import_goods',{}).get('csamt',0)):,.2f}"],
+                ["4(A)(3) Inward Supplies (RCM)", f"{float(avail.get('rcm_inward',{}).get('iamt',0)):,.2f}", f"{float(avail.get('rcm_inward',{}).get('camt',0)):,.2f}", f"{float(avail.get('rcm_inward',{}).get('samt',0)):,.2f}", f"{float(avail.get('rcm_inward',{}).get('csamt',0)):,.2f}"],
                 ["4(A)(4) ISD Inward", f"{float(avail.get('isd',{}).get('iamt',0)):,.2f}", f"{float(avail.get('isd',{}).get('camt',0)):,.2f}", f"{float(avail.get('isd',{}).get('samt',0)):,.2f}", f"{float(avail.get('isd',{}).get('csamt',0)):,.2f}"],
                 ["4(A)(5) All Other ITC (GSTR-2B)", f"{float(avail.get('all_other',{}).get('iamt',0)):,.2f}", f"{float(avail.get('all_other',{}).get('camt',0)):,.2f}", f"{float(avail.get('all_other',{}).get('samt',0)):,.2f}", f"{float(avail.get('all_other',{}).get('csamt',0)):,.2f}"],
                 ["4(B)(1) Permanent Reversals (17(5))", f"{float(rev.get('permanent_17_5_rules',{}).get('iamt',0)):,.2f}", f"{float(rev.get('permanent_17_5_rules',{}).get('camt',0)):,.2f}", f"{float(rev.get('permanent_17_5_rules',{}).get('samt',0)):,.2f}", f"{float(rev.get('permanent_17_5_rules',{}).get('csamt',0)):,.2f}"],
@@ -143,15 +166,14 @@ def generate_gstr3b_filing_pack(g3b_data: Dict[str, Any], output_path: str):
         )
     ]
 
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
     with open(output_path, "w", encoding="utf-8") as f:
         f.write("\n".join(lines) + "\n")
 
 
-def generate_reconciliation_report(recon_data: Dict[str, Any], output_path: str):
+def generate_reconciliation_report(recon_data: dict[str, Any], output_path: str) -> None:
     """Generates human-readable, audit-ready GSTR-2B reconciliation report."""
     s = recon_data.get("summary", {})
-    t4 = recon_data.get("gstr3b_table_4_auto_population", {})
     det = recon_data.get("details", {})
 
     lines = [
@@ -163,8 +185,8 @@ def generate_reconciliation_report(recon_data: Dict[str, Any], output_path: str)
             ["Category", "Invoice Count", "Description"],
             [
                 ["Exact Matched Invoices", s.get("exact_matched_count", 0), "100% match on GSTIN, Invoice No, and Tax values"],
-                ["Tolerance Matched Invoices", s.get("tolerance_matched_count", 0), "Matched within +/- ₹1 rounding tolerance"],
-                ["Value Mismatches", s.get("value_mismatch_count", 0), "Discrepancy > ₹1 (Restricted claim)"],
+                ["Tolerance Matched Invoices", s.get("tolerance_matched_count", 0), "Matched within single-axis +/- ₹1.00 tax tolerance"],
+                ["Value Mismatches", s.get("value_mismatch_count", 0), "Discrepancy in tax > ₹1.00 (Restricted claim)"],
                 ["In Books Only", s.get("in_books_only_count", 0), "Supplier not filed GSTR-1 yet (Rule 36(4) Deferred)"],
                 ["In 2B Only", s.get("in_2b_only_count", 0), "Unrecorded purchases or incorrect GSTIN"],
                 ["Section 17(5) Blocked Credit", s.get("blocked_17_5_count", 0), "Permanent reversal in Table 4(B)(1)"],
@@ -186,12 +208,12 @@ def generate_reconciliation_report(recon_data: Dict[str, Any], output_path: str)
     else:
         lines.append("No missing invoices. All purchase register invoices reflect in GSTR-2B.")
 
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
     with open(output_path, "w", encoding="utf-8") as f:
         f.write("\n".join(lines) + "\n")
 
 
-def main():
+def main() -> None:
     if len(sys.argv) < 4:
         print("Usage: python3 generate_filing_pack.py <gstr1_input.json> <gstr3b_input.json> <reconciliation.json> [output_dir]")
         sys.exit(1)
@@ -211,7 +233,6 @@ def main():
     generate_gstr1_filing_pack(g1_data, os.path.join(out_dir, "gstr1_filing_pack.md"))
     generate_gstr3b_filing_pack(g3b_data, os.path.join(out_dir, "gstr3b_filing_pack.md"))
     generate_reconciliation_report(recon_data, os.path.join(out_dir, "reconciliation_report.md"))
-
 
     print(f"SUCCESS: Generated all CA Filing Packs in directory -> '{out_dir}/'")
 

@@ -11,12 +11,13 @@ import sys
 # Ensure root directory is on sys.path for standalone script invocation
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from typing import Any, Dict, List, Optional
+from typing import Any
+
 from scripts.itc_optimizer import optimize_from_input_dict
 from scripts.utils import round_cur
 
 
-def sum_tax_rows(rows: List[Dict[str, Any]], key: str) -> float:
+def sum_tax_rows(rows: list[dict[str, Any]], key: str) -> float:
     """Helper to sum numeric tax fields from heterogeneous dicts."""
     total = 0.0
     for r in rows:
@@ -26,7 +27,7 @@ def sum_tax_rows(rows: List[Dict[str, Any]], key: str) -> float:
     return total
 
 
-def generate_portal_gstr3b(input_data: Dict[str, Any]) -> Dict[str, Any]:
+def generate_portal_gstr3b(input_data: dict[str, Any]) -> dict[str, Any]:
     """Transforms canonical GSTR-3B input JSON into official portal JSON."""
     gstin = input_data.get("gstin", "")
     ret_period = input_data.get("ret_period", "")
@@ -119,7 +120,7 @@ def generate_portal_gstr3b(input_data: Dict[str, Any]) -> Dict[str, Any]:
     rev = itc_input.get("reversed", {})
     other = itc_input.get("other_details", {})
 
-    itc_avl: List[Dict[str, Any]] = [
+    itc_avl: list[dict[str, Any]] = [
         {"ty": "IMPG", "iamt": round_cur(avail.get("import_goods", {}).get("iamt", 0.0)), "csamt": round_cur(avail.get("import_goods", {}).get("csamt", 0.0))},
         {"ty": "IMPS", "iamt": round_cur(avail.get("import_services", {}).get("iamt", 0.0)), "csamt": round_cur(avail.get("import_services", {}).get("csamt", 0.0))},
         {"ty": "ISRC", "iamt": round_cur(avail.get("rcm_inward", {}).get("iamt", 0.0)), "camt": round_cur(avail.get("rcm_inward", {}).get("camt", 0.0)), "samt": round_cur(avail.get("rcm_inward", {}).get("samt", 0.0)), "csamt": round_cur(avail.get("rcm_inward", {}).get("csamt", 0.0))},
@@ -127,7 +128,7 @@ def generate_portal_gstr3b(input_data: Dict[str, Any]) -> Dict[str, Any]:
         {"ty": "OTH", "iamt": round_cur(avail.get("all_other", {}).get("iamt", 0.0)), "camt": round_cur(avail.get("all_other", {}).get("camt", 0.0)), "samt": round_cur(avail.get("all_other", {}).get("samt", 0.0)), "csamt": round_cur(avail.get("all_other", {}).get("csamt", 0.0))}
     ]
 
-    itc_rev: List[Dict[str, Any]] = [
+    itc_rev: list[dict[str, Any]] = [
         {"ty": "RUL", "iamt": round_cur(rev.get("permanent_17_5_rules", {}).get("iamt", 0.0)), "camt": round_cur(rev.get("permanent_17_5_rules", {}).get("camt", 0.0)), "samt": round_cur(rev.get("permanent_17_5_rules", {}).get("samt", 0.0)), "csamt": round_cur(rev.get("permanent_17_5_rules", {}).get("csamt", 0.0))},
         {"ty": "OTH", "iamt": round_cur(rev.get("temporary_others", {}).get("iamt", 0.0)), "camt": round_cur(rev.get("temporary_others", {}).get("camt", 0.0)), "samt": round_cur(rev.get("temporary_others", {}).get("samt", 0.0)), "csamt": round_cur(rev.get("temporary_others", {}).get("csamt", 0.0))}
     ]
@@ -192,7 +193,6 @@ def generate_portal_gstr3b(input_data: Dict[str, Any]) -> Dict[str, Any]:
     # Table 6.1: tx_pmt (Tax Payment & Optimal Set-off)
     opt_res = optimize_from_input_dict(input_data)
     m = opt_res["setoff_matrix"]
-    cu = opt_res.get("credit_utilization", {})
     cash = opt_res["net_cash_required"]
 
     tx_pmt = {
@@ -237,6 +237,7 @@ def generate_portal_gstr3b(input_data: Dict[str, Any]) -> Dict[str, Any]:
     }
 
     return {
+        "version": "gstr-wala-gstr3b-1.0",
         "gstin": gstin,
         "ret_period": ret_period,
         "sup_details": sup_details,

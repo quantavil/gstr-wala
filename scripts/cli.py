@@ -12,7 +12,6 @@ Usage:
 import json
 import os
 import sys
-from typing import Optional
 
 # Ensure root directory is on sys.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -21,19 +20,27 @@ import typer
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
-from rich import print as rprint
 
-from scripts.validate_gst_input import validate_gstr1_input, validate_gstr3b_input
-from scripts.gst_engine import compute_gstr1_tables
-from scripts.itc_optimizer import optimize_from_input_dict
-from scripts.reconcile_gstr2b import reconcile, flatten_gstr2b
-from scripts.reconcile_fast import reconcile_polars_rapidfuzz
-from scripts.bridge_gstr1_to_gstr3b import bridge_gstr1_and_2b_to_3b, check_drc_mismatch_risks
+from scripts.bridge_gstr1_to_gstr3b import (
+    bridge_gstr1_and_2b_to_3b,
+    check_drc_mismatch_risks,
+)
+from scripts.constants import detect_return_type
+from scripts.generate_filing_pack import (
+    generate_gstr1_filing_pack,
+    generate_gstr3b_filing_pack,
+    generate_reconciliation_report,
+    validate_against_schema,
+)
 from scripts.generate_gstr1_json import generate_portal_gstr1
 from scripts.generate_gstr3b_json import generate_portal_gstr3b
-from scripts.generate_filing_pack import generate_gstr1_filing_pack, generate_gstr3b_filing_pack, generate_reconciliation_report
 from scripts.generate_pdf_statement import generate_pdf
+from scripts.gst_engine import compute_gstr1_tables
 from scripts.ingest_pdf_vision import batch_convert_all_documents
+from scripts.reconcile_fast import reconcile_polars_rapidfuzz
+from scripts.reconcile_gstr2b import flatten_gstr2b, reconcile
+from scripts.utils import safe_float
+from scripts.validate_gst_input import validate_gstr1_input, validate_gstr3b_input
 
 app = typer.Typer(
     name="gstr-wala",
@@ -50,7 +57,7 @@ def pipeline(
     gstr2b: str = typer.Option(..., "--gstr2b", "-b", help="Path to official GSTR-2B JSON"),
     output_dir: str = typer.Option("output", "--output-dir", "-o", help="Output directory for filing packs"),
     pdf: bool = typer.Option(True, "--pdf/--no-pdf", help="Generate printable CA PDF statement")
-):
+) -> None:
     """Executes the complete deterministic end-to-end GST return pipeline."""
     console.print(Panel.fit(
         "[bold green]gstr-wala[/bold green] [cyan]• Indian GST Return Filing Pipeline[/cyan]\n"
@@ -105,7 +112,11 @@ def pipeline(
         json.dump(g3b_input, f, indent=2)
 
     comp1 = compute_gstr1_tables(g1_data)
-    tot_2b_itc = recon_res["gstr3b_table_4_auto_population"]["table_4_a_5_all_other_itc"]["total"]
+    t4_pop = recon_res.get("gstr3b_table_4_auto_population", {})
+    tot_2b_itc = sum(
+        safe_float(t4_pop.get(k, {}).get("total", 0.0))
+        for k in ("table_4_a_1_import_goods", "table_4_a_3_rcm_inward", "table_4_a_4_isd", "table_4_a_5_all_other_itc")
+    )
     drc_res = check_drc_mismatch_risks(comp1["summary"], g3b_input, tot_2b_itc)
     console.print(f"  [green]✓[/green] DRC-01B Outward Risk: {drc_res['drc_01b_liability_mismatch']['warning']}")
     console.print(f"  [green]✓[/green] DRC-01C Inward ITC Risk: {drc_res['drc_01c_itc_mismatch']['warning']}")
@@ -118,15 +129,31 @@ def pipeline(
         json.dump(g3b_portal, f, indent=2)
     console.print(f"  [green]✓[/green] Written: [cyan]{g3b_out}[/cyan]")
 
-    # 6. CA Filing Packs & PDF
-    console.print("\n[bold yellow]Step 6/6:[/bold yellow] Generating CA Filing Packs and Statements...")
+    # 6. CA Filing Packs & Schema Validation & PDF
+    console.print("\n[bold yellow]Step 6/6:[/bold yellow] Validating Portal Schemas & Generating CA Filing Packs...")
+    schema_g1 = os.path.join(os.path.dirname(__file__), "..", "schemas", "gstr1_portal_schema.json")
+    schema_g3b = os.path.join(os.path.dirname(__file__), "..", "schemas", "gstr3b_portal_schema.json")
+    errs_g1 = validate_against_schema(g1_portal, schema_g1)
+    errs_g3b = validate_against_schema(g3b_portal, schema_g3b)
+    if errs_g1 or errs_g3b:
+        console.print("[bold red]Portal Schema Validation Failed:[/bold red]")
+        for err in errs_g1:
+            console.print(f"  [red]✗ GSTR-1 Schema Error:[/red] {err}")
+        for err in errs_g3b:
+            console.print(f"  [red]✗ GSTR-3B Schema Error:[/red] {err}")
+        raise typer.Exit(1)
+    console.print("  [green]✓[/green] GSTR-1 and GSTR-3B Portal JSONs strictly conform to canonical schemas.")
+
     generate_gstr1_filing_pack(g1_data, os.path.join(output_dir, "gstr1_filing_pack.md"))
     generate_gstr3b_filing_pack(g3b_input, os.path.join(output_dir, "gstr3b_filing_pack.md"))
     generate_reconciliation_report(recon_res, os.path.join(output_dir, "reconciliation_report.md"))
 
+    pdf_ok = False
     if pdf:
         pdf_path = os.path.join(output_dir, "gstr3b_statement.pdf")
-        generate_pdf(g3b_input, pdf_path)
+        pdf_ok = generate_pdf(g3b_input, pdf_path)
+        if not pdf_ok:
+            console.print("  [yellow]![/yellow] Warning: PDF statement generation failed or skipped; HTML version saved.")
 
     # Rich Summary Table
     table = Table(title="[bold green]Filing Outputs Generated Successfully[/bold green]", border_style="cyan")
@@ -139,19 +166,25 @@ def pipeline(
     table.add_row("GSTR-1 Summary Pack", os.path.join(output_dir, "gstr1_filing_pack.md"), "Client / CA Review")
     table.add_row("GSTR-3B Summary Pack", os.path.join(output_dir, "gstr3b_filing_pack.md"), "Challan & Offset Review")
     table.add_row("2B Reconciliation Audit", os.path.join(output_dir, "reconciliation_report.md"), "Vendor Follow-up")
-    if pdf:
-        table.add_row("CA Signed PDF Statement", os.path.join(output_dir, "gstr3b_statement.pdf"), "Printable Tax Audit Record")
+    if pdf and pdf_ok:
+        table.add_row("PDF Statement", os.path.join(output_dir, "gstr3b_statement.pdf"), "Printable Tax Audit Record")
 
     console.print("\n", table)
 
 
 @app.command()
-def validate(file_path: str = typer.Argument(..., help="Path to GSTR-1 or GSTR-3B JSON input")):
+def validate(file_path: str = typer.Argument(..., help="Path to GSTR-1 or GSTR-3B JSON input")) -> None:
     """Strictly validates a sales, purchase, or return input JSON."""
     with open(file_path, "r", encoding="utf-8") as f:
         data = json.load(f)
 
-    if "invoices" in data:
+    try:
+        ret_type = detect_return_type(data)
+    except ValueError as e:
+        console.print(f"[bold red]✗ Validation FAILED:[/bold red] {e}")
+        raise typer.Exit(1)
+
+    if ret_type == "GSTR-1":
         res = validate_gstr1_input(data)
     else:
         res = validate_gstr3b_input(data)
@@ -160,8 +193,8 @@ def validate(file_path: str = typer.Argument(..., help="Path to GSTR-1 or GSTR-3
         console.print("[bold green]✓ Validation PASSED: All statutory format and checksum checks hold.[/bold green]")
     else:
         console.print(f"[bold red]✗ Validation FAILED with {len(res.errors)} error(s):[/bold red]")
-        for e in res.errors:
-            console.print(f"  [red]•[/red] {e}")
+        for err in res.errors:
+            console.print(f"  [red]•[/red] {err}")
         raise typer.Exit(1)
 
 
@@ -171,7 +204,7 @@ def reconcile_command(
     purchases: str = typer.Argument(..., help="Purchase Register JSON"),
     gstr2b: str = typer.Argument(..., help="GSTR-2B JSON"),
     fast: bool = typer.Option(False, "--fast", help="Use Rust/C++ accelerated Polars + RapidFuzz engine")
-):
+) -> None:
     """Reconciles Purchase Register against GSTR-2B."""
     with open(purchases, "r", encoding="utf-8") as f:
         pr = json.load(f)
@@ -183,7 +216,7 @@ def reconcile_command(
     if fast:
         g2b_flat = flatten_gstr2b(g2b)
         res = reconcile_polars_rapidfuzz(pr_list, g2b_flat)
-        console.print(res)
+        console.print(json.dumps(res, indent=2))
     else:
         res = reconcile(pr_list, g2b)
         console.print(json.dumps(res, indent=2))
@@ -197,7 +230,7 @@ def ingest_pdf(
     output_dir: str = typer.Option("work/images", "--output-dir", "-o", help="Output directory for rendered images"),
     dpi: int = typer.Option(200, "--dpi", help="Image rendering resolution in DPI"),
     force_image: bool = typer.Option(False, "--force-image", "-f", help="Force image vision mode for all pages")
-):
+) -> None:
     """Batch rasterizes multi-page PDF invoices into structured Page 1, 2, 3... images for AI vision."""
     res = batch_convert_all_documents(input_path, output_dir=output_dir, dpi=dpi, force_image=force_image)
     console.print(f"[bold green]✓ Converted {res['total_pdf_documents']} PDF(s) into {res['total_rendered_page_images']} high-res page images in '{output_dir}/'[/bold green]")
@@ -207,7 +240,7 @@ def ingest_pdf(
 def report(
     gstr3b_input: str = typer.Argument(..., help="GSTR-3B Input JSON"),
     output_pdf: str = typer.Argument("output/gstr3b_statement.pdf", help="Output PDF path")
-):
+) -> None:
     """Renders printable CA tax audit and filing statements via Jinja2 & WeasyPrint."""
     with open(gstr3b_input, "r", encoding="utf-8") as f:
         data = json.load(f)

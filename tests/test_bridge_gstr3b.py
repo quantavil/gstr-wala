@@ -14,6 +14,8 @@ def test_due_date_rejects_invalid_period():
 
 
 def test_gst_engine_dispatch_not_misclassify():
+    import pytest
+
     from scripts.gst_engine import compute
 
     data = {
@@ -24,7 +26,7 @@ def test_gst_engine_dispatch_not_misclassify():
     res = compute(data)
     assert res["return_type"] == "GSTR-3B"
 
-    # ambiguous: both GSTR-1 and GSTR-3B keys present -> must dispatch to 3B
+    # ambiguous: both GSTR-1 and GSTR-3B keys present -> must raise ValueError
     data2 = {
         "gstin": "27ABCDE1234F1Z5",
         "ret_period": "042026",
@@ -32,8 +34,8 @@ def test_gst_engine_dispatch_not_misclassify():
         "outward_supplies": {"taxable": {"txval": 100.0, "iamt": 18.0, "camt": 0.0, "samt": 0.0, "csamt": 0.0}},
         "invoices": [{"inum": "INV-1", "idt": "10-04-2026", "pos": "27", "items": [{"txval": 100.0, "iamt": 18.0}]}],
     }
-    res2 = compute(data2)
-    assert res2["return_type"] == "GSTR-3B"
+    with pytest.raises(ValueError, match="ambiguous payload"):
+        compute(data2)
 
 
 def test_interest_remainder_sum():

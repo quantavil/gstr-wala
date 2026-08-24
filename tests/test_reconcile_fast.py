@@ -1,7 +1,7 @@
 """Pytest scale & volume performance benchmark for 100,000 invoice reconciliation."""
 
 import time
-import pytest
+
 from scripts.reconcile_fast import reconcile_polars_rapidfuzz
 
 

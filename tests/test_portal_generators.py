@@ -1,11 +1,11 @@
 """Pytest test suite for GSTR-1 & GSTR-3B JSON generators and Bridge."""
 
-import json
-import pytest
+from scripts.bridge_gstr1_to_gstr3b import (
+    bridge_gstr1_and_2b_to_3b,
+    check_drc_mismatch_risks,
+)
 from scripts.generate_gstr1_json import generate_portal_gstr1
 from scripts.generate_gstr3b_json import generate_portal_gstr3b
-from scripts.bridge_gstr1_to_gstr3b import bridge_gstr1_and_2b_to_3b, check_drc_mismatch_risks
-
 
 
 def test_generate_gstr1_portal_schema():

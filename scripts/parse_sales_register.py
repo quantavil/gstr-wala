@@ -28,9 +28,9 @@ import sys
 # Ensure root directory is on sys.path for standalone script invocation
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from typing import Any, Dict, List
+from typing import Any
+
 from scripts.utils import excel_cell_to_str, normalize_date_str, safe_float_strict
-from scripts.validate_gst_input import compute_gstin_checksum, is_valid_gstin
 
 _INUM_ALIASES = ("invoice_number", "inv_num", "inum", "invoice no", "invoice_no")
 _DATE_ALIASES = ("invoice_date", "date", "idt")
@@ -45,7 +45,7 @@ _CESS_ALIASES = ("cess", "csamt")
 _TAX_COL_ALIASES = _IGST_ALIASES + _CGST_ALIASES + _SGST_ALIASES
 
 
-def _pick(row_norm: Dict[str, str], aliases: tuple) -> str:
+def _pick(row_norm: dict[str, str], aliases: tuple) -> str:
     """Returns the first non-blank value among aliases, else ''."""
     for alias in aliases:
         val = row_norm.get(alias)
@@ -55,7 +55,7 @@ def _pick(row_norm: Dict[str, str], aliases: tuple) -> str:
 
 
 def _money(
-    row_norm: Dict[str, str],
+    row_norm: dict[str, str],
     aliases: tuple,
     row_idx: int,
     required: bool = False,
@@ -86,8 +86,8 @@ def _money(
 
 
 def parse_rows_sales(
-    rows: List[Dict[str, Any]], gstin: str, fp: str, derive_taxes: bool = False
-) -> Dict[str, Any]:
+    rows: list[dict[str, Any]], gstin: str, fp: str, derive_taxes: bool = False
+) -> dict[str, Any]:
     """Normalizes generic row dictionaries into canonical GSTR-1 invoices."""
     if not rows:
         raise ValueError("Sales register contains no data rows — cannot produce GSTR-1 input from an empty register.")
@@ -99,7 +99,7 @@ def parse_rows_sales(
         all_keys.update(str(k).strip().lower() for k in row if k is not None)
     tax_alias_present = any(alias in all_keys for alias in _TAX_COL_ALIASES)
 
-    invoices_map: Dict[str, Dict[str, Any]] = {}
+    invoices_map: dict[str, dict[str, Any]] = {}
 
     for row_idx, row in enumerate(rows, start=1):
         # excel_cell_to_str: None->"", int-valued floats de-poisoned ("1001.0"->"1001"),
@@ -226,17 +226,15 @@ def parse_rows_sales(
     }
 
 
-def parse_csv_sales(csv_path: str, gstin: str, fp: str, derive_taxes: bool = False) -> Dict[str, Any]:
+def parse_csv_sales(csv_path: str, gstin: str, fp: str, derive_taxes: bool = False) -> dict[str, Any]:
     """Parses standard CSV sales register into canonical format."""
-    rows = []
-    with open(csv_path, "r", encoding="utf-8-sig") as f:
+    with open(csv_path, "r", encoding="utf-8", errors="replace") as f:
         reader = csv.DictReader(f)
-        for r in reader:
-            rows.append(r)
+        rows = list(reader)
     return parse_rows_sales(rows, gstin, fp, derive_taxes=derive_taxes)
 
 
-def parse_excel_sales(excel_path: str, gstin: str, fp: str, derive_taxes: bool = False) -> Dict[str, Any]:
+def parse_excel_sales(excel_path: str, gstin: str, fp: str, derive_taxes: bool = False) -> dict[str, Any]:
     """Parses Excel (.xlsx, .xls, .xlsb) sales register using fast Calamine engine."""
     from scripts.reconcile_fast import read_excel_calamine
 
@@ -288,7 +286,8 @@ def main():
     with open(out_file, "w", encoding="utf-8") as f:
         json.dump(canonical, f, indent=2)
 
-    print(f"SUCCESS: Parsed {len(canonical.get('invoices'))} invoice(s) -> '{out_file}'")
+    invoices_list = canonical.get("invoices") or []
+    print(f"SUCCESS: Parsed {len(invoices_list)} invoice(s) -> '{out_file}'")
 
 
 if __name__ == "__main__":
