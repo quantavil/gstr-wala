@@ -1,0 +1,53 @@
+{
+  "manifest_version": "2026.1.0",
+  "effective_date": "2026-04-01",
+  "last_synced": "2026-08-24T11:45:00+05:30",
+  "statutory_rules": {
+    "b2cl_threshold": {
+      "value": 100000.0,
+      "currency": "INR",
+      "authority": "CBIC Notification No. 12/2024–Central Tax",
+      "effective_from": "2024-08-01",
+      "description": "Invoice value threshold for interstate unregistered sales requiring Table 5 B2CL invoice-level reporting"
+    },
+    "table_12_hsn_b2b_b2c_split": {
+      "mandatory": true,
+      "authority": "GSTN Advisory on Table 12 HSN Reporting (May 2025)",
+      "description": "Requires HSN summary to be bifurcated into Table 12A (B2B) and Table 12B (B2C)"
+    },
+    "interest_rates": {
+      "section_50_1_net_cash_p_a": 0.18,
+      "section_50_3_wrong_avail_utilized_p_a": 0.24,
+      "authority": "Section 50 CGST Act / Finance Act 2021 retrospective amendment"
+    },
+    "late_fee_caps": {
+      "nil_return_daily_cgst": 10.0,
+      "nil_return_daily_sgst": 10.0,
+      "nil_return_max_cap_total": 500.0,
+      "upto_1.5cr_daily_cgst": 25.0,
+      "upto_1.5cr_daily_sgst": 25.0,
+      "upto_1.5cr_max_cap_total": 2000.0,
+      "slab_1.5cr_to_5cr_max_cap_total": 5000.0,
+      "above_5cr_max_cap_total": 10000.0,
+      "authority": "Notification No. 19/2021–Central Tax & rationalization notifications"
+    },
+    "drc_surveillance_thresholds": {
+      "drc_01b_rule_88c": {
+        "percentage_threshold": 20.0,
+        "amount_threshold": 2500000.0,
+        "description": "GSTR-1 vs GSTR-3B outward tax liability mismatch trigger"
+      },
+      "drc_01c_rule_88d": {
+        "percentage_threshold": 10.0,
+        "amount_threshold": 100000.0,
+        "description": "GSTR-3B vs GSTR-2B claimed ITC excess trigger"
+      }
+    },
+    "statutory_gst_rates": [0.0, 0.1, 0.25, 1.5, 3.0, 5.0, 6.0, 12.0, 18.0, 28.0]
+  },
+  "sources": [
+    "https://taxinformation.cbic.gov.in/",
+    "https://www.gst.gov.in/newsandupdates",
+    "https://developer.gst.gov.in/apiportal/"
+  ]
+}

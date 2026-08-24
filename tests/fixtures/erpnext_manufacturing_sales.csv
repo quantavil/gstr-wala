@@ -1,0 +1,6 @@
+invoice_number,invoice_date,customer_gstin,place_of_supply,taxable_value,gst_rate,igst,cgst,sgst,cess,hsn_code,description,uqc,quantity
+INV/MFG/2026/01,02-04-2026,29AAAAA0000A1ZY,29,250000,18,45000,0,0,0,8471,Industrial controller units,NOS,10
+INV/MFG/2026/02,06-04-2026,27BBBBB1111B1ZN,27,100000,28,0,14000,14000,5000,8708,Automobile spare parts,SET,5
+INV/MFG/2026/03,12-04-2026,27BBBBB1111B1ZN,27,50000,5,0,1250,1250,0,8413,Centrifugal water pumps,NOS,2
+INV/MFG/2026/04,18-04-2026,,29,150000,18,27000,0,0,0,8471,Custom electronic display,NOS,1
+INV/MFG/2026/05,24-04-2026,,27,30000,18,0,2700,2700,0,8471,Accessories & connectors,NOS,50

@@ -1,0 +1,6 @@
+invoice_number,invoice_date,customer_gstin,place_of_supply,taxable_value,gst_rate,igst,cgst,sgst,cess,hsn_code,description,uqc,quantity
+RET/2026/001,01-04-2026,,27,5000,18,0,450,450,0,8471,Wireless Mouse,NOS,10
+RET/2026/002,03-04-2026,,27,12000,18,0,1080,1080,0,8471,Mechanical Keyboards,NOS,4
+RET/2026/003,08-04-2026,,29,80000,18,14400,0,0,0,8471,High-End Monitors (Interstate <= 1L),NOS,4
+RET/2026/004,14-04-2026,,29,150000,18,27000,0,0,0,8471,Custom Workstation (Interstate > 1L -> B2CL),NOS,1
+RET/2026/005,22-04-2026,,33,180000,18,32400,0,0,0,8471,Multi-GPU Rig (Interstate > 1L -> B2CL),NOS,1

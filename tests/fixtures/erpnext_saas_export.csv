@@ -1,0 +1,5 @@
+invoice_number,invoice_date,customer_gstin,place_of_supply,taxable_value,gst_rate,igst,cgst,sgst,cess,hsn_code,description,uqc,quantity,exp_typ
+EXP/SAAS/2026/01,05-04-2026,,97,1200000,0,0,0,0,0,998314,SaaS Subscription Export under LUT,OTH,1,WOPAY
+EXP/SAAS/2026/02,12-04-2026,,97,800000,0,0,0,0,0,998313,IT Consulting Services under LUT,OTH,1,WOPAY
+DOM/SAAS/2026/01,15-04-2026,29AAAAA0000A1ZY,29,300000,18,54000,0,0,0,998314,Domestic Cloud Enterprise Tier,OTH,1,
+DOM/SAAS/2026/02,20-04-2026,27BBBBB1111B1ZN,27,200000,18,0,18000,18000,0,998313,Annual Maintenance Contract,OTH,1,

@@ -1,0 +1,13 @@
+# gstr-wala workspace gitignore
+# Blocks client financial records and tax data from being committed to git
+docs/
+work/
+output/
+*.json
+*.csv
+*.xlsx
+*.pdf
+*GSTR*
+*2B*
+*Challan*
+*ARN*

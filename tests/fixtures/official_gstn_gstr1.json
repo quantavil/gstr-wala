@@ -1,0 +1,181 @@
+{
+  "gstin": "27AAAAA0000A1Z2",
+  "fp": "042026",
+  "gt": 150000000.0,
+  "cur_gt": 37500000.0,
+  "invoices": [
+    {
+      "inum": "INV-2026-001",
+      "idt": "02-04-2026",
+      "pos": "29",
+      "ctin": "29AAAAA0000A1ZY",
+      "val": 118000.0,
+      "inv_typ": "R",
+      "rchrg": "N",
+      "items": [
+        {
+          "txval": 100000.0,
+          "rt": 18.0,
+          "iamt": 18000.0,
+          "camt": 0.0,
+          "samt": 0.0,
+          "csamt": 0.0,
+          "hsn_sc": "84713010",
+          "desc": "Laptops & Microcomputers",
+          "uqc": "NOS",
+          "qty": 5.0
+        }
+      ]
+    },
+    {
+      "inum": "INV-2026-002",
+      "idt": "05-04-2026",
+      "pos": "27",
+      "ctin": "27BBBBB1111B1ZN",
+      "val": 560000.0,
+      "inv_typ": "R",
+      "rchrg": "N",
+      "items": [
+        {
+          "txval": 500000.0,
+          "rt": 12.0,
+          "iamt": 0.0,
+          "camt": 30000.0,
+          "samt": 30000.0,
+          "csamt": 0.0,
+          "hsn_sc": "84143000",
+          "desc": "Compressors for Refrigerators",
+          "uqc": "NOS",
+          "qty": 50.0
+        }
+      ]
+    },
+    {
+      "inum": "INV-2026-003",
+      "idt": "10-04-2026",
+      "pos": "29",
+      "val": 141600.0,
+      "inv_typ": "R",
+      "rchrg": "N",
+      "items": [
+        {
+          "txval": 120000.0,
+          "rt": 18.0,
+          "iamt": 21600.0,
+          "camt": 0.0,
+          "samt": 0.0,
+          "csamt": 0.0,
+          "hsn_sc": "84716010",
+          "desc": "Keyboards & Input Devices",
+          "uqc": "NOS",
+          "qty": 100.0
+        }
+      ]
+    },
+    {
+      "inum": "INV-2026-004",
+      "idt": "15-04-2026",
+      "pos": "27",
+      "val": 35400.0,
+      "inv_typ": "R",
+      "rchrg": "N",
+      "items": [
+        {
+          "txval": 30000.0,
+          "rt": 18.0,
+          "iamt": 0.0,
+          "camt": 2700.0,
+          "samt": 2700.0,
+          "csamt": 0.0,
+          "hsn_sc": "84717020",
+          "desc": "Hard Disk Drives",
+          "uqc": "NOS",
+          "qty": 10.0
+        }
+      ]
+    },
+    {
+      "inum": "EXP-2026-001",
+      "idt": "20-04-2026",
+      "pos": "97",
+      "val": 2500000.0,
+      "exp_typ": "WOPAY",
+      "sb_num": "SB98765",
+      "sb_dt": "18-04-2026",
+      "port_code": "INNSA1",
+      "items": [
+        {
+          "txval": 2500000.0,
+          "rt": 18.0,
+          "iamt": 0.0,
+          "camt": 0.0,
+          "samt": 0.0,
+          "csamt": 0.0,
+          "hsn_sc": "84715000",
+          "desc": "Servers and processing units",
+          "uqc": "NOS",
+          "qty": 10.0
+        }
+      ]
+    }
+  ],
+  "credit_debit_notes": [
+    {
+      "nt_num": "CDN-2026-001",
+      "nt_dt": "22-04-2026",
+      "ntty": "C",
+      "inum": "INV-2026-001",
+      "idt": "02-04-2026",
+      "pos": "29",
+      "ctin": "29AAAAA0000A1ZY",
+      "val": 23600.0,
+      "rchrg": "N",
+      "items": [
+        {
+          "txval": 20000.0,
+          "rt": 18.0,
+          "iamt": 3600.0,
+          "camt": 0.0,
+          "samt": 0.0,
+          "csamt": 0.0,
+          "hsn_sc": "84713010",
+          "desc": "Laptops & Microcomputers (Returned item)",
+          "uqc": "NOS",
+          "qty": 1.0
+        }
+      ]
+    }
+  ],
+  "nil_exempt_non_gst": {
+    "nil_inter_reg": 0.0,
+    "nil_inter_unreg": 0.0,
+    "nil_intra_reg": 0.0,
+    "nil_intra_unreg": 50000.0,
+    "expt_inter_reg": 0.0,
+    "expt_inter_unreg": 0.0,
+    "expt_intra_reg": 0.0,
+    "expt_intra_unreg": 25000.0,
+    "ngsup_inter_reg": 0.0,
+    "ngsup_inter_unreg": 0.0,
+    "ngsup_intra_reg": 0.0,
+    "ngsup_intra_unreg": 0.0
+  },
+  "doc_summary": [
+    {
+      "doc_num": 1,
+      "from": "INV-2026-001",
+      "to": "INV-2026-004",
+      "totnum": 4,
+      "canc": 0,
+      "net_issue": 4
+    },
+    {
+      "doc_num": 5,
+      "from": "CDN-2026-001",
+      "to": "CDN-2026-001",
+      "totnum": 1,
+      "canc": 0,
+      "net_issue": 1
+    }
+  ]
+}

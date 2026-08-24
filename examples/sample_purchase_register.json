@@ -1,0 +1,43 @@
+{
+  "purchases": [
+    {
+      "ctin": "29AAAAA0000A1ZY",
+      "inum": "PUR-001",
+      "idt": "04-04-2026",
+      "pos": "27",
+      "txval": 80000.0,
+      "iamt": 14400.0,
+      "camt": 0.0,
+      "samt": 0.0,
+      "csamt": 0.0,
+      "is_blocked_17_5": false,
+      "unpaid_days": 10
+    },
+    {
+      "ctin": "27BBBBB1111B1ZN",
+      "inum": "PUR-002",
+      "idt": "10-04-2026",
+      "pos": "27",
+      "txval": 50000.0,
+      "iamt": 0.0,
+      "camt": 4500.0,
+      "samt": 4500.0,
+      "csamt": 0.0,
+      "is_blocked_17_5": false,
+      "unpaid_days": 15
+    },
+    {
+      "ctin": "27CCCCC2222C1Z8",
+      "inum": "PUR-003",
+      "idt": "14-04-2026",
+      "pos": "27",
+      "txval": 20000.0,
+      "iamt": 0.0,
+      "camt": 1800.0,
+      "samt": 1800.0,
+      "csamt": 0.0,
+      "is_blocked_17_5": true,
+      "unpaid_days": 5
+    }
+  ]
+}

@@ -1,0 +1,48 @@
+# Python environment & cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+env/
+venv/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Testing & Coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.hypothesis/
+.mypy_cache/
+
+# User Financial Data & Workspaces (Never commit raw taxpayer data)
+docs/
+work/
+output/
+
+# Exclude generic docs but allow test fixtures and examples
+!tests/fixtures/*
+!examples/*
+
+# IDE & OS files
+.DS_Store
+.idea/
+.vscode/
+*.swp

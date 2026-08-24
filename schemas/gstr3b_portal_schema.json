@@ -1,0 +1,111 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "GSTR3BPortalSchema",
+  "description": "GSTN Official Offline Return Schema for GSTR-3B",
+  "type": "object",
+  "required": ["gstin", "ret_period", "sup_details", "itc_elg", "inward_sup", "tx_pmt"],
+  "properties": {
+    "gstin": { "type": "string" },
+    "ret_period": { "type": "string" },
+    "sup_details": {
+      "type": "object",
+      "required": ["osup_det", "osup_zero", "osup_nil_exmp", "isup_rev", "osup_nongst"],
+      "properties": {
+        "osup_det": {
+          "type": "object",
+          "required": ["txval", "iamt", "camt", "samt", "csamt"]
+        },
+        "osup_zero": {
+          "type": "object",
+          "required": ["txval", "iamt", "csamt"]
+        },
+        "osup_nil_exmp": {
+          "type": "object",
+          "required": ["txval"]
+        },
+        "isup_rev": {
+          "type": "object",
+          "required": ["txval", "iamt", "camt", "samt", "csamt"]
+        },
+        "osup_nongst": {
+          "type": "object",
+          "required": ["txval"]
+        }
+      }
+    },
+    "inter_sup": {
+      "type": "object",
+      "properties": {
+        "unreg_details": { "type": "array" },
+        "comp_details": { "type": "array" },
+        "uin_details": { "type": "array" }
+      }
+    },
+    "eco_dtls": {
+      "type": "object",
+      "properties": {
+        "eco_m_sup": { "type": "object" },
+        "eco_sup": { "type": "object" }
+      }
+    },
+    "itc_elg": {
+      "type": "object",
+      "required": ["itc_avl", "itc_rev", "itc_net", "itc_inelg"],
+      "properties": {
+        "itc_avl": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["ty", "iamt", "camt", "samt", "csamt"]
+          }
+        },
+        "itc_rev": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["ty", "iamt", "camt", "samt", "csamt"]
+          }
+        },
+        "itc_net": {
+          "type": "object",
+          "required": ["iamt", "camt", "samt", "csamt"]
+        },
+        "itc_inelg": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["ty", "iamt", "camt", "samt", "csamt"]
+          }
+        }
+      }
+    },
+    "inward_sup": {
+      "type": "object",
+      "properties": {
+        "isup_details": { "type": "array" }
+      }
+    },
+    "interest_details": {
+      "type": "object",
+      "properties": {
+        "iamt": { "type": "number" },
+        "camt": { "type": "number" },
+        "samt": { "type": "number" },
+        "csamt": { "type": "number" }
+      }
+    },
+    "tx_pmt": {
+      "type": "object",
+      "required": ["tx_py"],
+      "properties": {
+        "tx_py": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["trans_typ", "liab_ldg_id", "paid_itc", "paid_cash"]
+          }
+        }
+      }
+    }
+  }
+}

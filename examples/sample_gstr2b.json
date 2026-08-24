@@ -1,0 +1,85 @@
+{
+  "gstin": "27AAAAA0000A1Z2",
+  "fp": "042026",
+  "data": {
+    "docdata": {
+      "b2b": [
+        {
+          "ctin": "29AAAAA0000A1ZY",
+          "trdnm": "Alpha Technologies Pvt Ltd",
+          "inv": [
+            {
+              "inum": "PUR-001",
+              "dt": "04-04-2026",
+              "val": 94400.0,
+              "pos": "27",
+              "rev": "N",
+              "itcavl": "Y",
+              "items": [
+                {
+                  "num": 1,
+                  "txval": 80000.0,
+                  "rt": 18.0,
+                  "iamt": 14400.0,
+                  "camt": 0.0,
+                  "samt": 0.0,
+                  "csamt": 0.0
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "ctin": "27BBBBB1111B1ZN",
+          "trdnm": "Beta Services LLP",
+          "inv": [
+            {
+              "inum": "PUR-002",
+              "dt": "10-04-2026",
+              "val": 59000.0,
+              "pos": "27",
+              "rev": "N",
+              "itcavl": "Y",
+              "items": [
+                {
+                  "num": 1,
+                  "txval": 50000.0,
+                  "rt": 18.0,
+                  "iamt": 0.0,
+                  "camt": 4500.0,
+                  "samt": 4500.0,
+                  "csamt": 0.0
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "ctin": "27CCCCC2222C1Z8",
+          "trdnm": "Gamma Hospitality Services",
+          "inv": [
+            {
+              "inum": "PUR-003",
+              "dt": "14-04-2026",
+              "val": 23600.0,
+              "pos": "27",
+              "rev": "N",
+              "itcavl": "Y",
+              "items": [
+                {
+                  "num": 1,
+                  "txval": 20000.0,
+                  "rt": 18.0,
+                  "iamt": 0.0,
+                  "camt": 1800.0,
+                  "samt": 1800.0,
+                  "csamt": 0.0
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

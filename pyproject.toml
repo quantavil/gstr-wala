@@ -1,0 +1,78 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gstr-wala"
+version = "1.0.0"
+description = "Deterministic AI Agent Skill & Python Engine Suite for Indian GST Compliance (GSTR-1, GSTR-3B, GSTR-2B Reconciliation & Rule 88A Optimization)"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { file = "LICENSE" }
+authors = [
+    { name = "gstr-wala team" }
+]
+keywords = ["gst", "gstr1", "gstr3b", "gstr2b", "india-tax", "tax-compliance", "ai-skill", "agentic-skill"]
+dependencies = [
+    "pydantic>=2.5.0",
+    "typer>=0.12.0",
+    "rich>=13.7.0",
+    "polars>=1.0.0",
+    "rapidfuzz>=3.8.0",
+    "python-calamine>=0.2.0",
+    "jinja2>=3.1.0",
+    "pypdfium2>=4.30.0",
+    "pdfplumber>=0.11.0",
+    "pillow>=10.0.0"
+]
+
+[project.scripts]
+gstr-wala = "scripts.cli:app"
+
+[project.optional-dependencies]
+pdf = [
+    "weasyprint>=61.0"
+]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-cov>=5.0.0",
+    "hypothesis>=6.100.0",
+    "mypy>=1.10.0",
+    "ruff>=0.4.0"
+]
+all = [
+    "weasyprint>=61.0",
+    "pytest>=8.0.0",
+    "pytest-cov>=5.0.0",
+    "hypothesis>=6.100.0",
+    "mypy>=1.10.0",
+    "ruff>=0.4.0"
+]
+
+[tool.setuptools.packages.find]
+include = ["scripts*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = "-v --tb=short --cov=scripts --cov-report=term-missing"
+
+[tool.coverage.run]
+source = ["scripts"]
+omit = ["tests/*"]
+
+[tool.mypy]
+python_version = "3.12"
+check_untyped_defs = true
+warn_unused_configs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+
+[[tool.mypy.overrides]]
+module = [
+    "weasyprint.*",
+    "pypdfium2.*",
+    "pdfplumber.*",
+    "python_calamine.*"
+]
+ignore_missing_imports = true

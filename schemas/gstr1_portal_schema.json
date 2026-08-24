@@ -1,0 +1,134 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "GSTR1PortalSchema",
+  "description": "GSTN Official Offline Return Schema for GSTR-1",
+  "type": "object",
+  "required": ["gstin", "fp"],
+  "properties": {
+    "gstin": { "type": "string" },
+    "fp": { "type": "string" },
+    "gt": { "type": "number" },
+    "cur_gt": { "type": "number" },
+    "b2b": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["ctin", "inv"],
+        "properties": {
+          "ctin": { "type": "string" },
+          "cfs": { "type": "string" },
+          "inv": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["inum", "idt", "val", "pos", "itms"],
+              "properties": {
+                "inum": { "type": "string" },
+                "idt": { "type": "string" },
+                "val": { "type": "number" },
+                "pos": { "type": "string" },
+                "rchrg": { "type": "string" },
+                "inv_typ": { "type": "string" },
+                "itms": { "type": "array" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "b2cl": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["pos", "inv"],
+        "properties": {
+          "pos": { "type": "string" },
+          "inv": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["inum", "idt", "val", "itms"],
+              "properties": {
+                "inum": { "type": "string" },
+                "idt": { "type": "string" },
+                "val": { "type": "number" },
+                "itms": { "type": "array" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "b2cs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["sply_ty", "rt", "txval", "pos"],
+        "properties": {
+          "sply_ty": { "type": "string" },
+          "pos": { "type": "string" },
+          "rt": { "type": "number" },
+          "txval": { "type": "number" },
+          "iamt": { "type": "number" },
+          "camt": { "type": "number" },
+          "samt": { "type": "number" },
+          "csamt": { "type": "number" }
+        }
+      }
+    },
+    "cdnr": { "type": "array" },
+    "cdnur": { "type": "array" },
+    "exp": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["exp_typ", "inv"],
+        "properties": {
+          "exp_typ": { "type": "string" },
+          "inv": { "type": "array" }
+        }
+      }
+    },
+    "at": { "type": "array" },
+    "atadj": { "type": "array" },
+    "exemp": {
+      "type": "object",
+      "properties": {
+        "nil_supplies": { "type": "object" },
+        "exptd_supplies": { "type": "object" },
+        "ngsupplies": { "type": "object" }
+      }
+    },
+    "hsn": {
+      "type": "object",
+      "properties": {
+        "data": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["num", "hsn_sc", "desc", "uqc", "qty", "val", "txval"],
+            "properties": {
+              "num": { "type": "integer" },
+              "hsn_sc": { "type": "string" },
+              "desc": { "type": "string" },
+              "uqc": { "type": "string" },
+              "qty": { "type": "number" },
+              "val": { "type": "number" },
+              "txval": { "type": "number" },
+              "iamt": { "type": "number" },
+              "camt": { "type": "number" },
+              "samt": { "type": "number" },
+              "csamt": { "type": "number" }
+            }
+          }
+        }
+      }
+    },
+    "doc_issue": {
+      "type": "object",
+      "properties": {
+        "doc_det": { "type": "array" }
+      }
+    }
+  }
+}
