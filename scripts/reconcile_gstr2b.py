@@ -189,6 +189,45 @@ def flatten_gstr2b(g2b_data: Dict[str, Any]) -> List[Dict[str, Any]]:
     return records
 
 
+def _classify_books_invoice(pr_inv: Dict[str, Any]) -> Tuple[bool, bool, float, float]:
+    """Shared helper: classify books invoice for 17(5) blocked & Rule 37 (180-day).
+
+    Returns (is_blocked, is_unpaid_180, tot_tax, txval). Minimal extraction from
+    reconcile loop (lines 230-238) to enable future shared awareness with fast engine
+    without rewriting engine.
+    """
+    txval = float(pr_inv.get("txval", 0.0))
+    iamt = float(pr_inv.get("iamt", 0.0))
+    camt = float(pr_inv.get("camt", 0.0))
+    samt = float(pr_inv.get("samt", 0.0))
+    csamt = float(pr_inv.get("csamt", 0.0))
+    tot_tax = round_cur(iamt + camt + samt + csamt)
+    is_blocked = pr_inv.get("is_blocked_17_5", False) or (pr_inv.get("hsn_sc") in ["8702", "8703", "9963", "9965"])
+    is_unpaid_180 = pr_inv.get("unpaid_days", 0) > 180 or pr_inv.get("rule_37_reversal", False)
+    return is_blocked, is_unpaid_180, tot_tax, txval
+
+
+def _find_match_candidates(
+    ctin: str,
+    norm_in: str,
+    trail_in: str,
+    g2b_exact_map: Dict[Tuple[str, str], List[Tuple[int, Dict[str, Any]]]],
+    g2b_trailing_map: Dict[Tuple[str, str], List[Tuple[int, Dict[str, Any]]]],
+    matched_2b_indices: Set[int],
+) -> List[Tuple[int, Dict[str, Any]]]:
+    """Helper extracted from reconcile candidate lookup (lines 240-251)."""
+    candidates = [
+        (idx, rec) for idx, rec in g2b_exact_map.get((ctin, norm_in), [])
+        if idx not in matched_2b_indices
+    ]
+    if not candidates:
+        candidates = [
+            (idx, rec) for idx, rec in g2b_trailing_map.get((ctin, trail_in), [])
+            if idx not in matched_2b_indices
+        ]
+    return candidates
+
+
 def reconcile(purchase_register: List[Dict[str, Any]], gstr2b_raw: Dict[str, Any]) -> Dict[str, Any]:
     """Reconciles Purchase Register against GSTR-2B records."""
     g2b_records = flatten_gstr2b(gstr2b_raw)
@@ -227,28 +266,11 @@ def reconcile(purchase_register: List[Dict[str, Any]], gstr2b_raw: Dict[str, Any
         norm_in = normalize_inum(inum)
         trail_in = extract_trailing_digits(norm_in)
 
-        txval = float(pr_inv.get("txval", 0.0))
-        iamt = float(pr_inv.get("iamt", 0.0))
-        camt = float(pr_inv.get("camt", 0.0))
-        samt = float(pr_inv.get("samt", 0.0))
-        csamt = float(pr_inv.get("csamt", 0.0))
-        tot_tax = round_cur(iamt + camt + samt + csamt)
+        is_blocked, is_unpaid_180, tot_tax, txval = _classify_books_invoice(pr_inv)
 
-        is_blocked = pr_inv.get("is_blocked_17_5", False) or (pr_inv.get("hsn_sc") in ["8702", "8703", "9963", "9965"])
-        is_unpaid_180 = pr_inv.get("unpaid_days", 0) > 180 or pr_inv.get("rule_37_reversal", False)
-
-        # 1. First try exact norm_inum match
-        candidates = [
-            (idx, rec) for idx, rec in g2b_exact_map.get((ctin, norm_in), [])
-            if idx not in matched_2b_indices
-        ]
-
-        # 2. If no exact match, try trailing digits match
-        if not candidates:
-            candidates = [
-                (idx, rec) for idx, rec in g2b_trailing_map.get((ctin, trail_in), [])
-                if idx not in matched_2b_indices
-            ]
+        candidates = _find_match_candidates(
+            ctin, norm_in, trail_in, g2b_exact_map, g2b_trailing_map, matched_2b_indices
+        )
 
         if not candidates:
             # Not found in 2B

@@ -49,7 +49,16 @@ def reconcile_polars_rapidfuzz(
 ) -> Dict[str, Any]:
     """High-volume 2B reconciliation using Polars vectorized joins and RapidFuzz."""
     if not books_records or not gstr2b_records:
-        return {"summary": {"total_books": len(books_records), "total_2b": len(gstr2b_records)}}
+        return {
+            "engine": "polars+rapidfuzz (Rust/C++ accelerated)",
+            "total_books_records": len(books_records),
+            "total_2b_records": len(gstr2b_records),
+            "exact_join_count": 0,
+            "fuzzy_matched_count": 0,
+            "fuzzy_matches": [],
+            "missing_in_2b_count": len(books_records),
+            "unmatched_2b_count": len(gstr2b_records),
+        }
 
     # Prepare Books DataFrame
     norm_books = []

@@ -5,6 +5,37 @@ import pytest
 from scripts.reconcile_fast import reconcile_polars_rapidfuzz
 
 
+def test_fast_empty_returns_same_shape():
+    res = reconcile_polars_rapidfuzz([], [])
+    assert "exact_join_count" in res
+    assert "fuzzy_matched_count" in res
+    assert res["missing_in_2b_count"] == 0
+    # full shape contract: must have all keys expected by CLI/tests
+    assert "engine" in res
+    assert "total_books_records" in res
+    assert "total_2b_records" in res
+    assert "fuzzy_matches" in res
+    assert "unmatched_2b_count" in res
+    assert res["total_books_records"] == 0
+    assert res["total_2b_records"] == 0
+    assert res["exact_join_count"] == 0
+    assert res["fuzzy_matched_count"] == 0
+    assert res["unmatched_2b_count"] == 0
+    assert res["fuzzy_matches"] == []
+
+
+def test_fast_vs_slow_contract_same_invoice():
+    books = [{"ctin": "29BBBBB1111B1Z2", "inum": "INV-101", "txval": 10000.0, "iamt": 1800.0}]
+    g2b_raw = {"data": {"docdata": {"b2b": [{"ctin": "29BBBBB1111B1Z2", "inv": [{"inum": "INV-101", "dt": "10-04-2026", "itcavl": "Y", "items": [{"txval": 10000.0, "iamt": 1800.0}]}]}]}}}
+    from scripts.reconcile_gstr2b import flatten_gstr2b, reconcile
+
+    g2b_flat = flatten_gstr2b(g2b_raw)
+    fast = reconcile_polars_rapidfuzz(books, g2b_flat)
+    slow = reconcile(books, g2b_raw)
+    assert fast["exact_join_count"] == 1
+    assert fast["missing_in_2b_count"] == slow["summary"]["in_books_only_count"]
+
+
 
 def test_100k_invoice_scale_benchmark():
     """Generates 10,000 synthetic records (scaled for fast CI test) asserting < 1.0s runtime."""
