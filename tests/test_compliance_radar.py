@@ -28,6 +28,26 @@ def test_constants_match_manifest():
     assert VALID_RATES == set(m["statutory_rules"]["statutory_gst_rates"])
 
 
+def test_patch_rejects_nested_injection(tmp_path):
+    from scripts.compliance_radar import apply_compliance_patch
+    import json
+
+    patch2 = {"patch_id": "Y", "statutory_rules": {"interest_rates": {"section_50_1_net_cash_p_a": 0.99}}}
+    pf2 = tmp_path / "patch2.json"
+    pf2.write_text(json.dumps(patch2))
+    assert apply_compliance_patch(str(pf2)) is False  # 0.99 >0.30 bound should fail
+
+    # also test evil_key rejected
+    patch = {
+        "patch_id": "X",
+        "statutory_rules": {"interest_rates": {"section_50_1_net_cash_p_a": 0.01}, "evil_key": {"x": 1}},
+        "manifest_version": "2026.2.0",
+    }
+    pf = tmp_path / "patch.json"
+    pf.write_text(json.dumps(patch))
+    assert apply_compliance_patch(str(pf)) is False
+
+
 def test_drc_uses_manifest_not_hardcode():
     # patch manifest in memory by monkeypatching constants values? Instead test current thresholds are those from manifest by importing them
     from scripts.constants import DRC_01B_PCT, DRC_01B_AMT, DRC_01C_PCT, DRC_01C_AMT

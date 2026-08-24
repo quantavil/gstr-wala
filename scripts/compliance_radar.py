@@ -38,7 +38,12 @@ def run_self_verification() -> bool:
     """Runs core test suite to verify that statutory rules do not violate invariants."""
     root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
     # Run full test suite avoiding recursive invocation of self-test
-    cmd = ["uv", "run", "pytest", "tests/", "-k", "not test_compliance_radar", "-q"]
+    import shutil
+
+    if shutil.which("uv"):
+        cmd = ["uv", "run", "pytest", "tests/", "-k", "not test_compliance_radar", "-q"]
+    else:
+        cmd = [sys.executable, "-m", "pytest", "tests/", "-k", "not test_compliance_radar", "-q"]
     try:
         res = subprocess.run(cmd, cwd=root_dir, capture_output=True, text=True)
         return res.returncode == 0
@@ -71,19 +76,147 @@ def apply_compliance_patch(patch_file: str) -> bool:
             else:
                 d[k] = v
 
+    # Strict nested allowlist + per-field bounds
+    _ALLOWED_STATUTORY = {
+        "b2cl_threshold": {"value": (50000, 500000)},
+        "interest_rates": {
+            "section_50_1_net_cash_p_a": (0.0, 0.30),
+            "section_50_3_wrong_avail_utilized_p_a": (0.0, 0.30),
+        },
+        "late_fee_caps": {
+            "nil_return_daily_cgst": (0, float("inf")),
+            "nil_return_daily_sgst": (0, float("inf")),
+            "nil_return_max_cap_total": (0, float("inf")),
+            "upto_1.5cr_daily_cgst": (0, float("inf")),
+            "upto_1.5cr_daily_sgst": (0, float("inf")),
+            "upto_1.5cr_max_cap_total": (0, float("inf")),
+            "slab_1.5cr_to_5cr_max_cap_total": (0, float("inf")),
+            "above_5cr_max_cap_total": (0, float("inf")),
+        },
+        "drc_surveillance_thresholds": None,
+        "statutory_gst_rates": None,
+        "table_12_hsn_b2b_b2c_split": {"mandatory": None},
+    }
+
+    def _validate_patch(stat_rules: dict) -> bool:
+        for key, val in stat_rules.items():
+            if key not in _ALLOWED_STATUTORY:
+                print(f"Error: statutory_rules key '{key}' not allowlisted — abort")
+                return False
+            allowed = _ALLOWED_STATUTORY[key]
+            if key == "b2cl_threshold":
+                if not isinstance(val, dict):
+                    print("Error: b2cl_threshold must be object — abort")
+                    return False
+                for sub_k, sub_v in val.items():
+                    if sub_k not in allowed:
+                        print(f"Error: b2cl_threshold subkey '{sub_k}' not allowlisted — abort")
+                        return False
+                    lo, hi = allowed[sub_k]
+                    try:
+                        fv = float(sub_v)
+                    except (TypeError, ValueError):
+                        print(f"Error: b2cl_threshold {sub_k} not numeric — abort")
+                        return False
+                    if not (lo <= fv <= hi):
+                        print(f"Error: b2cl_threshold {sub_v} out of bounds [{lo},{hi}] — abort")
+                        return False
+            elif key == "interest_rates":
+                if not isinstance(val, dict):
+                    print("Error: interest_rates must be object — abort")
+                    return False
+                for sub_k, sub_v in val.items():
+                    if sub_k not in allowed:
+                        print(f"Error: interest_rates subkey '{sub_k}' not allowlisted — abort")
+                        return False
+                    lo, hi = allowed[sub_k]
+                    try:
+                        fv = float(sub_v)
+                    except (TypeError, ValueError):
+                        print(f"Error: interest_rates {sub_k} not numeric — abort")
+                        return False
+                    if not (lo <= fv <= hi):
+                        print(f"Error: interest_rates {sub_k} {sub_v} out of bounds [{lo},{hi}] — abort")
+                        return False
+            elif key == "late_fee_caps":
+                if not isinstance(val, dict):
+                    print("Error: late_fee_caps must be object — abort")
+                    return False
+                for sub_k, sub_v in val.items():
+                    if sub_k not in allowed:
+                        print(f"Error: late_fee_caps subkey '{sub_k}' not allowlisted — abort")
+                        return False
+                    lo, hi = allowed[sub_k]
+                    try:
+                        fv = float(sub_v)
+                    except (TypeError, ValueError):
+                        print(f"Error: late_fee_caps {sub_k} not numeric — abort")
+                        return False
+                    if not (lo <= fv <= hi):
+                        print(f"Error: late_fee_caps {sub_k} {sub_v} out of bounds [{lo},{hi}] — abort")
+                        return False
+            elif key == "drc_surveillance_thresholds":
+                if not isinstance(val, dict):
+                    print("Error: drc_surveillance_thresholds must be object — abort")
+                    return False
+                allowed_outer = {"drc_01b_rule_88c", "drc_01c_rule_88d"}
+                for outer_k, outer_v in val.items():
+                    if outer_k not in allowed_outer:
+                        print(f"Error: drc_surveillance_thresholds key '{outer_k}' not allowlisted — abort")
+                        return False
+                    if not isinstance(outer_v, dict):
+                        print(f"Error: {outer_k} must be object — abort")
+                        return False
+                    for inner_k, inner_v in outer_v.items():
+                        if inner_k == "percentage_threshold":
+                            try:
+                                fv = float(inner_v)
+                            except (TypeError, ValueError):
+                                print(f"Error: {outer_k} percentage_threshold not numeric — abort")
+                                return False
+                            if not (0 < fv <= 100):
+                                print(f"Error: {outer_k} percentage_threshold {inner_v} out of bounds (0,100] — abort")
+                                return False
+                        elif inner_k == "amount_threshold":
+                            try:
+                                fv = float(inner_v)
+                            except (TypeError, ValueError):
+                                print(f"Error: {outer_k} amount_threshold not numeric — abort")
+                                return False
+                            if not (fv > 0):
+                                print(f"Error: {outer_k} amount_threshold {inner_v} must be >0 — abort")
+                                return False
+                        elif inner_k == "description":
+                            continue
+                        else:
+                            print(f"Error: {outer_k} subkey '{inner_k}' not allowlisted — abort")
+                            return False
+            elif key == "statutory_gst_rates":
+                if not isinstance(val, list):
+                    print("Error: statutory_gst_rates must be list — abort")
+                    return False
+            elif key == "table_12_hsn_b2b_b2c_split":
+                if not isinstance(val, dict):
+                    print("Error: table_12_hsn_b2b_b2c_split must be object — abort")
+                    return False
+                for sub_k in val.keys():
+                    if sub_k not in allowed:
+                        print(f"Error: table_12_hsn_b2b_b2c_split subkey '{sub_k}' not allowlisted — abort")
+                        return False
+        return True
+
     # Basic allowlist + bounds for statutory patch
     _ALLOWED_TOP_KEYS = {"statutory_rules", "manifest_version", "effective_date", "last_synced"}
-    for k in patch_data.keys():
+    for k in list(patch_data.keys()):
         if k not in _ALLOWED_TOP_KEYS and k not in ("patch_id", "authority", "discovered_triggers"):
             print(f"Warning: patch key '{k}' not allowlisted — ignoring")
             patch_data.pop(k, None)
 
     if "statutory_rules" in patch_data:
-        # bounds: B2CL 50k-500k, interest 0-0.30, caps numeric
-        br = patch_data["statutory_rules"].get("b2cl_threshold", {}).get("value")
-        if br is not None and not (50000 <= float(br) <= 500000):
-            print(f"Error: b2cl_threshold {br} out of bounds [50k,500k] — abort")
+        if not _validate_patch(patch_data["statutory_rules"]):
             return False
+        # filter to only allowlisted keys before deep_update (defense in depth)
+        patch_data["statutory_rules"] = {k: v for k, v in patch_data["statutory_rules"].items() if k in _ALLOWED_STATUTORY}
         deep_update(current_manifest["statutory_rules"], patch_data["statutory_rules"])
     if "manifest_version" in patch_data:
         current_manifest["manifest_version"] = patch_data["manifest_version"]
