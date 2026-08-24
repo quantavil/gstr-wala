@@ -1,8 +1,11 @@
 """Pytest test suite for gst_engine.py."""
 
+import copy
+
 import pytest
 from scripts.gst_engine import (
     compute,
+    compute_gstr1_tables,
     compute_statutory_interest,
     compute_statutory_late_fee,
 )
@@ -102,3 +105,25 @@ def test_late_fee_turnover_caps():
     )
     assert res_nil["total_late_fee"] == 500.0
     assert res_nil["capped"] is True
+
+
+def test_compute_gstr1_tables_does_not_mutate_input():
+    data = {
+        "gstin": "27ABCDE1234F1Z5",
+        "fp": "042026",
+        "invoices": [
+            {"inum": "INV-1", "idt": "10-04-2026", "pos": "27", "val": 11800.0,
+             "items": [{"txval": 10000.0, "rt": 18.0, "iamt": 0.0, "camt": 900.0, "samt": 900.0}]}
+        ]
+    }
+    orig = copy.deepcopy(data)
+    _ = compute_gstr1_tables(data)
+    assert data == orig
+    data2 = {"gstin": "27ABCDE1234F1Z5","fp":"042026","invoices":[
+        {"inum":"INV-2","idt":"10-04-2026","val":11800.0,"ctin":"29ABCDE1234F1Z5",
+         "items":[{"txval":10000.0,"rt":18.0,"iamt":0.0,"camt":900.0,"samt":900.0}]}
+    ]}
+    orig2 = copy.deepcopy(data2)
+    res = compute_gstr1_tables(data2)
+    assert data2 == orig2
+    assert res["table_4_b2b"][0]["pos"] == "29"

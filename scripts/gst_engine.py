@@ -82,9 +82,9 @@ def compute_gstr1_tables(data: Dict[str, Any]) -> Dict[str, Any]:
                 pos = supplier_state
             else:
                 raise ValueError(f"Invoice '{inum}' is missing required Place of Supply ('pos')")
-        # Persist inferred POS back to invoice for downstream portal serializer
-        inv["pos"] = str(pos).zfill(2)
-        pos = inv["pos"]
+        resolved_pos = str(pos).zfill(2)
+        pos = resolved_pos
+        inv_view = {**inv, "pos": pos}
 
         rchrg = inv.get("rchrg", "N")
         inv_typ = inv.get("inv_typ", "R")
@@ -135,14 +135,14 @@ def compute_gstr1_tables(data: Dict[str, Any]) -> Dict[str, Any]:
         effective_inv_val = inv_val if inv_val > 0 else items_total_val
 
         if is_export:
-            exp_invoices.append(inv)
+            exp_invoices.append(inv_view)
         elif is_b2b:
-            b2b_invoices.append(inv)
+            b2b_invoices.append(inv_view)
         else:
             # B2C Invoice
             if is_interstate and effective_inv_val > B2CL_THRESHOLD:
                 # Table 5: B2CL (Inter-state > ₹1,00,000)
-                b2cl_invoices.append(inv)
+                b2cl_invoices.append(inv_view)
             else:
                 # Table 7: B2CS (Intra-state or Inter-state <= ₹1,00,000)
                 for itm in items:
