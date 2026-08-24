@@ -17,7 +17,7 @@ import sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from typing import Any, Dict
-from jinja2 import Template
+from jinja2 import Environment
 from scripts.itc_optimizer import optimize_from_input_dict
 
 HTML_TEMPLATE_GSTR3B = """
@@ -233,7 +233,8 @@ def generate_pdf(g3b_data: Dict[str, Any], output_pdf_path: str) -> bool:
     rev_s = float(rev.get("samt", 0.0))
     rev_cs = float(rev.get("csamt", 0.0))
 
-    template = Template(HTML_TEMPLATE_GSTR3B)
+    env = Environment(autoescape=True)
+    template = env.from_string(HTML_TEMPLATE_GSTR3B)
     rendered_html = template.render(
         gstin=g3b_data.get("gstin", ""),
         ret_period=g3b_data.get("ret_period", ""),
