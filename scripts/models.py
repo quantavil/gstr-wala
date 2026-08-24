@@ -94,6 +94,7 @@ class OptimizationResult(TypedDict, total=False):
     closing_cash_ledger: dict[str, float]
     interest_liability: dict[str, float]
     late_fee_liability: dict[str, float]
+    cash_tax_payable: dict[str, float]
     challan_pmt06: dict[str, Any]
     challan_pmt06_required: dict[str, float]
 
@@ -142,7 +143,7 @@ class GSTRItem(BaseModel):
 class GSTR1Invoice(BaseModel):
     inum: str = Field(min_length=1, max_length=16, description="Invoice Number")
     idt: str = Field(description="Invoice Date (DD-MM-YYYY)")
-    pos: str = Field(min_length=2, max_length=2, description="Place of Supply state code")
+    pos: str = Field(description="Place of Supply state code")
     val: float | None = Field(default=0.0, ge=0.0, description="Total invoice value")
     ctin: str | None = Field(default=None, description="Recipient GSTIN")
     rchrg: Literal["Y", "N"] = Field(default="N", description="Reverse Charge")
@@ -157,9 +158,10 @@ class GSTR1Invoice(BaseModel):
     @field_validator("pos")
     @classmethod
     def validate_pos(cls, v: str) -> str:
-        if str(v).zfill(2) not in STATE_CODES:
+        padded = str(v).strip().zfill(2)
+        if padded not in STATE_CODES:
             raise ValueError(f"Invalid Place of Supply State Code '{v}'")
-        return str(v).zfill(2)
+        return padded
 
     @field_validator("ctin")
     @classmethod

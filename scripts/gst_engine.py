@@ -44,7 +44,7 @@ def parse_date(dt_str: str | None) -> datetime | None:
     val = str(dt_str).strip()
     for fmt in ("%d-%m-%Y", "%Y-%m-%d"):
         try:
-            return datetime.strptime(val, fmt)  # noqa: DTZ007
+            return datetime.strptime(val, fmt)
         except ValueError:
             pass
     raise ValueError(f"Malformed date string: {dt_str!r}. Expected DD-MM-YYYY or YYYY-MM-DD format.")
@@ -443,7 +443,7 @@ def main():
     if not os.path.exists(file_path):
         sys.exit(f"Error: File '{file_path}' not found.")
 
-    with open(file_path, "r", encoding="utf-8") as f:
+    with open(file_path, encoding="utf-8") as f:
         data = json.load(f)
 
     result = compute(data)

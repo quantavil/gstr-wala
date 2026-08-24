@@ -1,7 +1,8 @@
 """Hypothesis property-based invariant testing suite for gstr-wala."""
 
-import pytest
-from hypothesis import given, settings, strategies as st
+from hypothesis import given, settings
+from hypothesis import strategies as st
+
 from scripts.itc_optimizer import optimize_setoff
 from scripts.validate_gst_input import STATE_CODES, compute_gstin_checksum, is_valid_gstin
 
@@ -9,7 +10,7 @@ from scripts.validate_gst_input import STATE_CODES, compute_gstin_checksum, is_v
 # Strategy for generating valid GSTIN prefixes
 @st.composite
 def gstin_strategy(draw):
-    state_str = draw(st.sampled_from(sorted(list(STATE_CODES.keys()))))
+    state_str = draw(st.sampled_from(sorted(STATE_CODES.keys())))
     pan_chars = "".join(draw(st.lists(st.sampled_from("ABCDEFGHIJKLMNOPQRSTUVWXYZ"), min_size=5, max_size=5)))
     pan_digits = f"{draw(st.integers(min_value=1000, max_value=9999))}"
     pan_last = draw(st.sampled_from("ABCDEFGHIJKLMNOPQRSTUVWXYZ"))

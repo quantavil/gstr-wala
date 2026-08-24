@@ -81,9 +81,9 @@ Format: `snake_case.json`
 | :--- | :--- |
 | `schemas/gstr1_input_schema.json` | User input sales register schema |
 | `schemas/gstr3b_input_schema.json` | User input GSTR-3B aggregation schema |
-| `schemas/gstr1_portal_schema.json` | Official GSTN offline portal upload format |
-| `schemas/gstr3b_portal_schema.json` | Official GSTN offline portal upload format |
-| `schemas/gstr2b_schema.json` | Official GSTN GSTR-2B download format |
+| `schemas/gstr1_portal_schema.json` | Offline-tool-shaped portal upload format (verify via GSTN Returns Offline Tool) |
+| `schemas/gstr3b_portal_schema.json` | Offline-tool-shaped portal upload format (verify via GSTN Returns Offline Tool) |
+| `schemas/gstr2b_schema.json` | GSTR-2B download shape (official portal export) |
 
 ---
 

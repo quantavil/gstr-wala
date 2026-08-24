@@ -21,10 +21,8 @@ from concurrent.futures import ThreadPoolExecutor
 # Ensure root directory is on sys.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from scripts.reconcile_fast import reconcile_polars_rapidfuzz
-
 from scripts.itc_optimizer import optimize_setoff
-from scripts.gst_engine import compute_gstr1_tables
+from scripts.reconcile_fast import reconcile_polars_rapidfuzz
 
 
 def generate_synthetic_workload(num_records: int):
@@ -82,11 +80,11 @@ def run_load_stress_benchmark(num_records: int = 100000, num_clients: int = 5):
     rec_start = time.perf_counter()
     res = reconcile_polars_rapidfuzz(books, g2b)
     rec_time = time.perf_counter() - rec_start
-    current_mem, peak_mem = tracemalloc.get_traced_memory()
+    _current_mem, peak_mem = tracemalloc.get_traced_memory()
     tracemalloc.stop()
 
     throughput = num_records / rec_time if rec_time > 0 else 0
-    print(f"[2/3] Vectorized Polars 2B Reconciliation Completed:")
+    print("[2/3] Vectorized Polars 2B Reconciliation Completed:")
     print(f"  • Time Taken: [bold]{rec_time:.3f} seconds[/bold]")
     print(f"  • Throughput: [bold]{throughput:,.0f} invoices/second[/bold]")
     print(f"  • Peak RAM Used: [bold]{peak_mem / (1024 * 1024):.2f} MB[/bold]")
@@ -95,10 +93,10 @@ def run_load_stress_benchmark(num_records: int = 100000, num_clients: int = 5):
     # 3. Concurrent Multi-Client Batch Processing
     print(f"\n[3/3] Simulating {num_clients} Concurrent Taxpayer Returns (Multithreaded Pool)...")
     batch_start = time.perf_counter()
-    
+
     def process_single_client(client_id: int):
         c_books, c_g2b = generate_synthetic_workload(10000)
-        c_res = reconcile_polars_rapidfuzz(c_books, c_g2b)
+        _ = reconcile_polars_rapidfuzz(c_books, c_g2b)
         c_opt = optimize_setoff(
             liabilities={"iamt": 100000.0, "camt": 50000.0, "samt": 50000.0, "csamt": 0.0},
             rcm_liabilities={"iamt": 5000.0, "camt": 0.0, "samt": 0.0, "csamt": 0.0},

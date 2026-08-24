@@ -2,19 +2,17 @@
 
 import json
 import os
-import pytest
+
+from scripts.bridge_gstr1_to_gstr3b import bridge_gstr1_and_2b_to_3b
 from scripts.generate_gstr1_json import generate_portal_gstr1
 from scripts.generate_gstr3b_json import generate_portal_gstr3b
-from scripts.reconcile_gstr2b import reconcile, flatten_gstr2b
-from scripts.bridge_gstr1_to_gstr3b import bridge_gstr1_and_2b_to_3b
-
-
+from scripts.reconcile_gstr2b import flatten_gstr2b, reconcile
 
 FIXTURES_DIR = os.path.join(os.path.dirname(__file__), "fixtures")
 
 
 def test_official_gstr1_offline_format():
-    with open(os.path.join(FIXTURES_DIR, "official_gstn_gstr1.json"), "r") as f:
+    with open(os.path.join(FIXTURES_DIR, "official_gstn_gstr1.json")) as f:
         g1_data = json.load(f)
 
     portal_payload = generate_portal_gstr1(g1_data)
@@ -46,7 +44,7 @@ def test_official_gstr1_offline_format():
 
 
 def test_official_gstr2b_download_parsing():
-    with open(os.path.join(FIXTURES_DIR, "official_gstn_gstr2b.json"), "r") as f:
+    with open(os.path.join(FIXTURES_DIR, "official_gstn_gstr2b.json")) as f:
         g2b_data = json.load(f)
 
     records = flatten_gstr2b(g2b_data)
@@ -66,9 +64,9 @@ def test_official_gstr2b_download_parsing():
 
 
 def test_full_bridge_and_gstr3b_generation():
-    with open(os.path.join(FIXTURES_DIR, "official_gstn_gstr1.json"), "r") as f:
+    with open(os.path.join(FIXTURES_DIR, "official_gstn_gstr1.json")) as f:
         g1_data = json.load(f)
-    with open(os.path.join(FIXTURES_DIR, "official_gstn_gstr2b.json"), "r") as f:
+    with open(os.path.join(FIXTURES_DIR, "official_gstn_gstr2b.json")) as f:
         g2b_data = json.load(f)
 
     # Empty purchase register to check bridging

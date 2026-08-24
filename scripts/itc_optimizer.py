@@ -16,24 +16,23 @@ Usage:
 import json
 import os
 import sys
-from decimal import Decimal, ROUND_HALF_UP
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 # Ensure root directory is on sys.path for standalone script invocation
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from scripts.models import TaxAmounts, OptimizationResult, SetOffMatrix, SetOffMatrixRow
-from scripts.utils import round_cur
+from scripts.models import OptimizationResult, TaxAmounts
+from scripts.utils import format_table, round_cur
 
 
 def optimize_setoff(
     liabilities: TaxAmounts,
     rcm_liabilities: TaxAmounts,
     available_itc: TaxAmounts,
-    opening_cash: Optional[Dict[str, float]] = None,
-    opening_credit: Optional[TaxAmounts] = None,
-    interest: Optional[Dict[str, float]] = None,
-    late_fee: Optional[Dict[str, float]] = None
+    opening_cash: dict[str, float] | None = None,
+    opening_credit: TaxAmounts | None = None,
+    interest: dict[str, float] | None = None,
+    late_fee: dict[str, float] | None = None
 ) -> OptimizationResult:
     """Solves the Rule 88A set-off optimization problem."""
     # Outward liabilities
@@ -82,12 +81,12 @@ def optimize_setoff(
         if rem_c_i > 0:
             avail_cap_c = max(0.0, l_c - alloc_c)
             avail_cap_s = max(0.0, l_s - alloc_s)
-            
+
             # Equal split of remaining
             half_rem = rem_c_i / 2.0
             extra_c = min(avail_cap_c, half_rem)
             extra_s = min(avail_cap_s, rem_c_i - extra_c)
-            
+
             # If extra_s didn't consume all remainder, try pushing more to C
             if (rem_c_i - extra_c - extra_s) > 0 and (avail_cap_c - extra_c) > 0:
                 more_c = min(avail_cap_c - extra_c, rem_c_i - extra_c - extra_s)
@@ -153,7 +152,7 @@ def optimize_setoff(
     intr_c = float(intr.get("camt", 0.0))
     intr_s = float(intr.get("samt", 0.0))
     intr_cs = float(intr.get("csamt", 0.0))
-    
+
     # Fallback if a single total interest_amount is supplied
     if (intr_i + intr_c + intr_s + intr_cs) == 0.0 and "interest_amount" in intr:
         tot_intr = float(intr.get("interest_amount", 0.0))
@@ -169,7 +168,7 @@ def optimize_setoff(
             # remainder ensures sum == tot_intr
             intr_cs = round_cur(tot_intr - intr_i - intr_c - intr_s)
             if intr_cs < 0:
-                # borrow negative remainder from largest head (typically intr_s) to avoid negative cess and preserve total
+                # borrow negative remainder from largest head to avoid negative cess and preserve total
                 if intr_s >= intr_c and intr_s >= intr_i:
                     intr_s = round_cur(intr_s + intr_cs)
                 elif intr_c >= intr_i:
@@ -177,10 +176,18 @@ def optimize_setoff(
                 else:
                     intr_i = round_cur(intr_i + intr_cs)
                 intr_cs = 0.0
-            if intr_cs == 0:
-                intr_cs = 0.0
         else:
-            intr_i = tot_intr
+            tot_outward = l_i + l_c + l_s + l_cs
+            if tot_outward > 0:
+                raw_i = tot_intr * (l_i / tot_outward)
+                raw_c = tot_intr * (l_c / tot_outward)
+                raw_s = tot_intr * (l_s / tot_outward)
+                intr_i = round_cur(raw_i)
+                intr_c = round_cur(raw_c)
+                intr_s = round_cur(raw_s)
+                intr_cs = round_cur(tot_intr - intr_i - intr_c - intr_s)
+            else:
+                intr_i = tot_intr
 
     lf = late_fee or {}
     lf_c = float(lf.get("camt", lf.get("cgst_late_fee", 0.0)))
@@ -260,6 +267,13 @@ def optimize_setoff(
         "late_fee_liability": {
             "camt": round_cur(lf_c), "samt": round_cur(lf_s), "total": round_cur(lf_c + lf_s)
         },
+        "cash_tax_payable": {
+            "iamt": round_cur(total_cash_tax_i),
+            "camt": round_cur(total_cash_tax_c),
+            "samt": round_cur(total_cash_tax_s),
+            "csamt": round_cur(total_cash_tax_cs),
+            "total": round_cur(total_cash_tax_i + total_cash_tax_c + total_cash_tax_s + total_cash_tax_cs)
+        },
         "net_cash_required": {
             "iamt": round_cur(req_cash_i),
             "camt": round_cur(req_cash_c),
@@ -284,7 +298,7 @@ def optimize_setoff(
     }
 
 
-def optimize_from_input_dict(data: Dict[str, Any]) -> OptimizationResult:
+def optimize_from_input_dict(data: dict[str, Any]) -> OptimizationResult:
     """Extracts parameters from canonical GSTR-3B input and executes optimization."""
     outward = data.get("outward_supplies", {})
     taxable = outward.get("taxable", {})
@@ -341,12 +355,6 @@ def optimize_from_input_dict(data: Dict[str, Any]) -> OptimizationResult:
     )
 
 
-def format_table(headers: List[str], rows: List[List[Any]]) -> str:
-    from scripts.utils import format_table as _ft
-
-    return _ft(headers, rows)
-
-
 def main():
     if len(sys.argv) < 2:
         print("Usage: python3 itc_optimizer.py <gstr3b_input.json> [--json]")
@@ -358,7 +366,7 @@ def main():
     if not os.path.exists(file_path):
         sys.exit(f"Error: File '{file_path}' not found.")
 
-    with open(file_path, "r", encoding="utf-8") as f:
+    with open(file_path, encoding="utf-8") as f:
         data = json.load(f)
 
     result = optimize_from_input_dict(data)

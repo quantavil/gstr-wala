@@ -1,8 +1,7 @@
-"""Pytest suite for Pydantic v2 models and unified CLI / Filing pack generator."""
-
 import os
 
 import pytest
+from pydantic import ValidationError
 
 from scripts.generate_filing_pack import (
     generate_gstr1_filing_pack,
@@ -29,9 +28,6 @@ def test_pydantic_gstr1_model():
     assert model.fp == "042026"
     assert len(model.invoices) == 1
     assert model.invoices[0].items[0].txval == 1000.0
-
-
-from pydantic import ValidationError
 
 
 def test_pydantic_invalid_gstin_raises():
@@ -72,7 +68,7 @@ def test_generate_filing_pack_markdown(tmp_path):
 
     assert os.path.exists(out_g1)
     assert os.path.exists(out_g3b)
-    with open(out_g1, "r") as f:
+    with open(out_g1) as f:
         content = f.read()
         assert "GSTR-1 Filing Pack" in content
 

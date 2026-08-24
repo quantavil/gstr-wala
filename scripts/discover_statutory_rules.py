@@ -50,7 +50,7 @@ COMPLIANCE_KEYWORDS = {
 
 CANONICAL_KNOWN_ADVISORIES = [
     {
-        "title": "CBIC Notification No. 12/2024–Central Tax: Reduction of B2CL threshold from Rs. 2.5 Lakh to Rs. 1.0 Lakh",
+        "title": "CBIC Notification No. 12/2024-Central Tax: Reduction of B2CL threshold from Rs. 2.5 Lakh to Rs. 1.0 Lakh",
         "url": "https://taxinformation.cbic.gov.in/content-page/notification-detail/12-2024-CT",
         "source": "CBIC Central Tax Notification",
         "source_of_truth": "bundled_snapshot"

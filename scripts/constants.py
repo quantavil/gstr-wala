@@ -46,6 +46,29 @@ DRC_01C_PCT: float = float(
 DRC_01C_AMT: float = float(
     _stat.get("drc_surveillance_thresholds", {}).get("drc_01c_rule_88d", {}).get("amount_threshold", 100000.0)
 )
+
+
+def reload_manifest() -> None:
+    """Reloads manifest dynamically and refreshes statutory thresholds."""
+    global _m, _stat, B2CL_THRESHOLD, VALID_RATES, DRC_01B_PCT, DRC_01B_AMT, DRC_01C_PCT, DRC_01C_AMT
+    _m = _load_manifest()
+    _stat = _m.get("statutory_rules", {})
+    B2CL_THRESHOLD = float(_stat.get("b2cl_threshold", {}).get("value", 100000.0))
+    VALID_RATES = set(_stat.get("statutory_gst_rates", [0.0, 0.1, 0.25, 1.5, 3.0, 5.0, 12.0, 18.0, 28.0]))
+    DRC_01B_PCT = float(
+        _stat.get("drc_surveillance_thresholds", {}).get("drc_01b_rule_88c", {}).get("percentage_threshold", 20.0)
+    )
+    DRC_01B_AMT = float(
+        _stat.get("drc_surveillance_thresholds", {}).get("drc_01b_rule_88c", {}).get("amount_threshold", 2500000.0)
+    )
+    DRC_01C_PCT = float(
+        _stat.get("drc_surveillance_thresholds", {}).get("drc_01c_rule_88d", {}).get("percentage_threshold", 10.0)
+    )
+    DRC_01C_AMT = float(
+        _stat.get("drc_surveillance_thresholds", {}).get("drc_01c_rule_88d", {}).get("amount_threshold", 100000.0)
+    )
+
+
 BLOCKED_HSNS = {"8702", "8703", "8704", "9963", "9965", "9966", "9967"}
 
 # Valid Indian State / Union Territory codes (01-38, 97)

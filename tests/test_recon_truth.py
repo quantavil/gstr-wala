@@ -623,7 +623,7 @@ class TestOfficialGstnPortalShape:
     def test_official_fixture_flattens_nonzero_and_reconciles(self):
         """Official GSTN portal JSON fixture with nested itms[].itm_det flattens non-zero and reconciles."""
         fixture_path = os.path.join(os.path.dirname(__file__), "fixtures", "gstr2b_official_shape.json")
-        with open(fixture_path, "r", encoding="utf-8") as f:
+        with open(fixture_path, encoding="utf-8") as f:
             g2b_raw = json.load(f)
 
         records = flatten_gstr2b(g2b_raw)

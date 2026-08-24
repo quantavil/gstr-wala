@@ -30,7 +30,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 from typing import Any
 
-from scripts.utils import excel_cell_to_str, normalize_date_str, safe_float_strict
+from scripts.utils import excel_cell_to_str, normalize_date_str, round_cur, safe_float_strict
 
 _INUM_ALIASES = ("invoice_number", "inv_num", "inum", "invoice no", "invoice_no")
 _DATE_ALIASES = ("invoice_date", "date", "idt")
@@ -76,7 +76,7 @@ def _money(
         except ValueError:
             raise ValueError(
                 f"Row {row_idx}: column '{alias}' has unparseable amount {raw!r}"
-            )
+            ) from None
     if required:
         raise ValueError(
             f"Row {row_idx}: missing required taxable value "
@@ -140,7 +140,7 @@ def parse_rows_sales(
             except ValueError:
                 raise ValueError(
                     f"Row {row_idx}: column 'quantity' has unparseable value {qty_raw!r}"
-                )
+                ) from None
         else:
             qty = None
         exp_typ = row_norm.get("exp_typ") or row_norm.get("export_type") or ("WOPAY" if pos == "97" and rt == 0 else None)
@@ -166,10 +166,10 @@ def parse_rows_sales(
                 )
             elif not tax_alias_present and derive_taxes:
                 if is_interstate:
-                    iamt = round((txval * rt) / 100.0, 2)
+                    iamt = round_cur((txval * rt) / 100.0)
                 else:
-                    camt = round((txval * rt) / 200.0, 2)
-                    samt = round((txval * rt) / 200.0, 2)
+                    camt = round_cur((txval * rt) / 200.0)
+                    samt = round_cur((txval * rt) / 200.0)
             else:
                 print(
                     f"Row {row_idx}: WARNING invoice '{inum}': GST rate {rt:g}% with "
@@ -217,7 +217,7 @@ def parse_rows_sales(
             "uqc": uqc,
             "qty": qty
         })
-        invoices_map[inum]["val"] = round(invoices_map[inum]["val"] + txval + iamt + camt + samt + csamt, 2)
+        invoices_map[inum]["val"] = round_cur(invoices_map[inum]["val"] + txval + iamt + camt + samt + csamt)
 
     return {
         "gstin": gstin,
@@ -228,7 +228,7 @@ def parse_rows_sales(
 
 def parse_csv_sales(csv_path: str, gstin: str, fp: str, derive_taxes: bool = False) -> dict[str, Any]:
     """Parses standard CSV sales register into canonical format."""
-    with open(csv_path, "r", encoding="utf-8", errors="replace") as f:
+    with open(csv_path, encoding="utf-8", errors="replace") as f:
         reader = csv.DictReader(f)
         rows = list(reader)
     return parse_rows_sales(rows, gstin, fp, derive_taxes=derive_taxes)
@@ -273,7 +273,7 @@ def main():
         elif lower_file.endswith((".xlsx", ".xls", ".xlsb")):
             canonical = parse_excel_sales(sales_file, args.gstin, args.fp, derive_taxes=args.derive_taxes)
         elif lower_file.endswith(".json"):
-            with open(sales_file, "r", encoding="utf-8") as f:
+            with open(sales_file, encoding="utf-8") as f:
                 canonical = json.load(f)
         else:
             sys.exit("Error: Unsupported file format. Supported: .csv, .xlsx, .xls, .xlsb, .json")

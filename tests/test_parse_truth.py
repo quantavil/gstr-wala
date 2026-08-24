@@ -12,14 +12,14 @@ from pathlib import Path
 
 import pytest
 
+from scripts.parse_purchase_register import parse_csv_purchases
+from scripts.parse_sales_register import parse_csv_sales, parse_rows_sales
 from scripts.utils import (
     excel_cell_to_str,
     normalize_date_str,
     safe_float,
     safe_float_strict,
 )
-from scripts.parse_purchase_register import parse_csv_purchases
-from scripts.parse_sales_register import parse_csv_sales, parse_rows_sales
 
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 
@@ -156,7 +156,7 @@ class TestExcelCellToStr:
         assert excel_cell_to_str(None) == ""
 
     def test_datetime_becomes_ddmmyyyy(self):
-        assert excel_cell_to_str(datetime.datetime(2026, 4, 5)) == "05-04-2026"  # noqa: DTZ001 — naive Excel cells are the scenario under test
+        assert excel_cell_to_str(datetime.datetime(2026, 4, 5)) == "05-04-2026"
 
     def test_date_becomes_ddmmyyyy(self):
         assert excel_cell_to_str(datetime.date(2026, 12, 31)) == "31-12-2026"
@@ -183,7 +183,7 @@ class TestNormalizeDateStr:
     def test_us_looking_date_interpreted_as_ddmm(self):
         # 04-05-2026 must be 4 May (DD-MM), not April 5th (US MM-DD)
         assert normalize_date_str("04-05-2026") == "04-05-2026"
-        d = datetime.datetime.strptime(normalize_date_str("04-05-2026"), "%d-%m-%Y")  # noqa: DTZ007 — timezone-naive by design
+        d = datetime.datetime.strptime(normalize_date_str("04-05-2026"), "%d-%m-%Y")
         assert d.day == 4 and d.month == 5
 
     def test_calendar_invalid_rejected(self):
@@ -202,7 +202,7 @@ class TestNormalizeDateStr:
         assert "Row 3" in str(exc.value)
 
     def test_excel_datetime_object_accepted(self):
-        assert normalize_date_str(datetime.datetime(2026, 4, 5)) == "05-04-2026"  # noqa: DTZ001 — naive Excel cells are the scenario under test
+        assert normalize_date_str(datetime.datetime(2026, 4, 5)) == "05-04-2026"
 
 
 # ---------------------------------------------------------------------------
@@ -216,7 +216,7 @@ FP = "042026"
 def _sales_rows(*rows):
     header = ["invoice_number", "invoice_date", "customer_gstin", "pos",
               "taxable_value", "gst_rate", "igst", "cgst", "sgst"]
-    return [dict(zip(header, r)) for r in rows]
+    return [dict(zip(header, r, strict=False)) for r in rows]
 
 
 class TestSalesRegisterTruthfulness:
@@ -376,7 +376,7 @@ class TestExplicitZeroTaxCellsVsAbsentColumns:
     def test_excel_path_shares_the_same_logic(self, capsys):
         # Same typed-cell shape as calamine output; exercises shared code path.
         raw_rows = [{
-            "invoice_number": "INV-XL", "invoice_date": datetime.datetime(2026, 4, 10),  # noqa: DTZ001 — naive Excel cells are the scenario under test
+            "invoice_number": "INV-XL", "invoice_date": datetime.datetime(2026, 4, 10),
             "customer_gstin": GSTIN, "pos": "27",
             "taxable_value": 10000.0, "gst_rate": 18.0,
             "igst": None, "cgst": None, "sgst": None,
@@ -403,7 +403,7 @@ class TestExplicitZeroTaxCellsVsAbsentColumns:
 
     def test_excel_float_poisoning_killed_at_parser_level(self):
         # Simulates calamine-typed cells reaching the row normalizer.
-        rows = [{"invoice_number": 1001.0, "invoice_date": datetime.datetime(2026, 4, 5),  # noqa: DTZ001 — naive Excel cells are the scenario under test
+        rows = [{"invoice_number": 1001.0, "invoice_date": datetime.datetime(2026, 4, 5),
                  "customer_gstin": GSTIN, "pos": "27", "taxable_value": 5000.0,
                  "gst_rate": 0.0}]
         result = parse_rows_sales(rows, GSTIN, FP)

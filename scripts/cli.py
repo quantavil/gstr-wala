@@ -69,7 +69,7 @@ def pipeline(
 
     # 1. Ingest Sales
     console.print("\n[bold yellow]Step 1/6:[/bold yellow] Ingesting and Validating Sales Register...")
-    with open(sales, "r", encoding="utf-8") as f:
+    with open(sales, encoding="utf-8") as f:
         g1_data = json.load(f)
     v1 = validate_gstr1_input(g1_data)
     if not v1.is_valid:
@@ -81,9 +81,9 @@ def pipeline(
 
     # 2. Reconcile Purchases
     console.print("\n[bold yellow]Step 2/6:[/bold yellow] Reconciling Purchase Register against GSTR-2B...")
-    with open(purchases, "r", encoding="utf-8") as f:
+    with open(purchases, encoding="utf-8") as f:
         pr_data = json.load(f)
-    with open(gstr2b, "r", encoding="utf-8") as f:
+    with open(gstr2b, encoding="utf-8") as f:
         g2b_data = json.load(f)
 
     pr_list = pr_data.get("purchases", pr_data) if isinstance(pr_data, dict) else pr_data
@@ -175,14 +175,14 @@ def pipeline(
 @app.command()
 def validate(file_path: str = typer.Argument(..., help="Path to GSTR-1 or GSTR-3B JSON input")) -> None:
     """Strictly validates a sales, purchase, or return input JSON."""
-    with open(file_path, "r", encoding="utf-8") as f:
+    with open(file_path, encoding="utf-8") as f:
         data = json.load(f)
 
     try:
         ret_type = detect_return_type(data)
     except ValueError as e:
         console.print(f"[bold red]✗ Validation FAILED:[/bold red] {e}")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     if ret_type == "GSTR-1":
         res = validate_gstr1_input(data)
@@ -203,12 +203,13 @@ def validate(file_path: str = typer.Argument(..., help="Path to GSTR-1 or GSTR-3
 def reconcile_command(
     purchases: str = typer.Argument(..., help="Purchase Register JSON"),
     gstr2b: str = typer.Argument(..., help="GSTR-2B JSON"),
-    fast: bool = typer.Option(False, "--fast", help="Use Rust/C++ accelerated Polars + RapidFuzz engine")
+    fast: bool = typer.Option(False, "--fast", help="Use Rust/C++ accelerated Polars + RapidFuzz engine"),
+    cutoff: str = typer.Option(None, "--cutoff", help="Section 16(4) evaluation cutoff date (DD-MM-YYYY); defaults to return-period due date")
 ) -> None:
     """Reconciles Purchase Register against GSTR-2B."""
-    with open(purchases, "r", encoding="utf-8") as f:
+    with open(purchases, encoding="utf-8") as f:
         pr = json.load(f)
-    with open(gstr2b, "r", encoding="utf-8") as f:
+    with open(gstr2b, encoding="utf-8") as f:
         g2b = json.load(f)
 
     pr_list = pr.get("purchases", pr) if isinstance(pr, dict) else pr
@@ -218,7 +219,7 @@ def reconcile_command(
         res = reconcile_polars_rapidfuzz(pr_list, g2b_flat)
         console.print(json.dumps(res, indent=2))
     else:
-        res = reconcile(pr_list, g2b)
+        res = reconcile(pr_list, g2b, _16_4_cutoff=cutoff)
         console.print(json.dumps(res, indent=2))
 
 
@@ -242,7 +243,7 @@ def report(
     output_pdf: str = typer.Argument("output/gstr3b_statement.pdf", help="Output PDF path")
 ) -> None:
     """Renders printable CA tax audit and filing statements via Jinja2 & WeasyPrint."""
-    with open(gstr3b_input, "r", encoding="utf-8") as f:
+    with open(gstr3b_input, encoding="utf-8") as f:
         data = json.load(f)
     generate_pdf(data, output_pdf)
 

@@ -27,8 +27,14 @@ def sum_tax_rows(rows: list[dict[str, Any]], key: str) -> float:
     return total
 
 
-def generate_portal_gstr3b(input_data: dict[str, Any]) -> dict[str, Any]:
-    """Transforms canonical GSTR-3B input JSON into official portal JSON."""
+# Payload version marker. This is a gstr-wala provenance tag, NOT the GSTN
+# offline-tool token — if the portal rejects direct upload, regenerate via the
+# official Returns Offline Tool or pass portal_version with the tool's value.
+GSTR3B_PORTAL_VERSION = "gstr-wala-gstr3b-1.0"
+
+
+def generate_portal_gstr3b(input_data: dict[str, Any], portal_version: str | None = None) -> dict[str, Any]:
+    """Transforms canonical GSTR-3B input JSON into offline-tool-shaped portal JSON."""
     gstin = input_data.get("gstin", "")
     ret_period = input_data.get("ret_period", "")
 
@@ -193,7 +199,7 @@ def generate_portal_gstr3b(input_data: dict[str, Any]) -> dict[str, Any]:
     # Table 6.1: tx_pmt (Tax Payment & Optimal Set-off)
     opt_res = optimize_from_input_dict(input_data)
     m = opt_res["setoff_matrix"]
-    cash = opt_res["net_cash_required"]
+    cash_tax = opt_res.get("cash_tax_payable", {})
 
     tx_pmt = {
         "tx_py": [
@@ -210,10 +216,10 @@ def generate_portal_gstr3b(input_data: dict[str, Any]) -> dict[str, Any]:
                     "csamt": round_cur(m["cess_liability"]["paid_by_cess_credit"])
                 },
                 "paid_cash": {
-                    "iamt": round_cur(cash.get("iamt", 0.0)),
-                    "camt": round_cur(cash.get("camt", 0.0)),
-                    "samt": round_cur(cash.get("samt", 0.0)),
-                    "csamt": round_cur(cash.get("csamt", 0.0))
+                    "iamt": round_cur(cash_tax.get("iamt", 0.0)),
+                    "camt": round_cur(cash_tax.get("camt", 0.0)),
+                    "samt": round_cur(cash_tax.get("samt", 0.0)),
+                    "csamt": round_cur(cash_tax.get("csamt", 0.0))
                 },
                 "tx_pmt_tax": {
                     "i_pd_i": round_cur(m["igst_liability"]["paid_by_igst_credit"]),
@@ -226,10 +232,10 @@ def generate_portal_gstr3b(input_data: dict[str, Any]) -> dict[str, Any]:
                     "cs_pd_cs": round_cur(m["cess_liability"]["paid_by_cess_credit"])
                 },
                 "tx_pmt_cash": {
-                    "iamt": round_cur(cash.get("iamt", 0.0)),
-                    "camt": round_cur(cash.get("camt", 0.0)),
-                    "samt": round_cur(cash.get("samt", 0.0)),
-                    "csamt": round_cur(cash.get("csamt", 0.0))
+                    "iamt": round_cur(cash_tax.get("iamt", 0.0)),
+                    "camt": round_cur(cash_tax.get("camt", 0.0)),
+                    "samt": round_cur(cash_tax.get("samt", 0.0)),
+                    "csamt": round_cur(cash_tax.get("csamt", 0.0))
                 },
                 "liab_ldg_id": 0
             }
@@ -237,7 +243,7 @@ def generate_portal_gstr3b(input_data: dict[str, Any]) -> dict[str, Any]:
     }
 
     return {
-        "version": "gstr-wala-gstr3b-1.0",
+        "version": portal_version or GSTR3B_PORTAL_VERSION,
         "gstin": gstin,
         "ret_period": ret_period,
         "sup_details": sup_details,
@@ -261,7 +267,7 @@ def main():
     if not os.path.exists(in_file):
         sys.exit(f"Error: File '{in_file}' not found.")
 
-    with open(in_file, "r", encoding="utf-8") as f:
+    with open(in_file, encoding="utf-8") as f:
         data = json.load(f)
 
     portal_json = generate_portal_gstr3b(data)

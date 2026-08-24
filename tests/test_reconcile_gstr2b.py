@@ -1,9 +1,7 @@
 """Pytest test suite for reconcile_gstr2b.py."""
 
 
-import pytest
 from scripts.reconcile_gstr2b import normalize_inum, reconcile
-
 
 
 def test_normalize_invoice_number():

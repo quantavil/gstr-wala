@@ -3,9 +3,9 @@
 import datetime
 import math
 import re
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import ROUND_HALF_UP, Decimal
 from functools import lru_cache
-from typing import Any, List
+from typing import Any
 
 
 def round_cur(val: Any) -> float:
@@ -212,7 +212,7 @@ def normalize_date_str(raw: Any, context: str = "") -> str:
     m_ymd = _RE_YMD.match(s)
     if m_dmy:
         try:
-            parsed = datetime.datetime.strptime(s.replace("/", "-"), "%d-%m-%Y")  # noqa: DTZ007 — invoice dates are timezone-naive by definition
+            parsed = datetime.datetime.strptime(s.replace("/", "-"), "%d-%m-%Y")
         except ValueError as exc:
             raise ValueError(
                 f"{prefix}calendar-invalid invoice date {raw!r} — expected "
@@ -220,7 +220,7 @@ def normalize_date_str(raw: Any, context: str = "") -> str:
             ) from exc
     elif m_ymd:
         try:
-            parsed = datetime.datetime.strptime(s, "%Y-%m-%d")  # noqa: DTZ007 — invoice dates are timezone-naive by definition
+            parsed = datetime.datetime.strptime(s, "%Y-%m-%d")
         except ValueError as exc:
             raise ValueError(
                 f"{prefix}calendar-invalid invoice date {raw!r} — expected "
@@ -239,12 +239,12 @@ def normalize_date_str(raw: Any, context: str = "") -> str:
 def safe_int(val: Any, default: int = 0) -> int:
     try:
         f = safe_float(val, default=float(default))
-        return int(round(f))
+        return round(f)
     except Exception:
         return default
 
 
-def format_table(headers: List[str], rows: List[List[Any]]) -> str:
+def format_table(headers: list[str], rows: list[list[Any]]) -> str:
     """Formats an ASCII markdown table."""
     col_widths = [len(h) for h in headers]
     for row in rows:
@@ -262,7 +262,7 @@ def format_table(headers: List[str], rows: List[List[Any]]) -> str:
             )
             + " |"
         )
-    return "\n".join([header_line, sep_line] + data_lines)
+    return "\n".join([header_line, sep_line, *data_lines])
 
 
 _RE_NON_ALNUM = re.compile(r"[^A-Za-z0-9]")

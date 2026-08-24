@@ -1,6 +1,5 @@
 """Pytest test suite for itc_optimizer.py."""
 
-import pytest
 from scripts.itc_optimizer import optimize_setoff
 
 

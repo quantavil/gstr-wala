@@ -19,11 +19,12 @@ import sys
 # Ensure root directory is on sys.path for standalone script invocation
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from typing import Any, Dict, List
+from typing import Any
+
 from scripts.utils import excel_cell_to_str, normalize_date_str, round_cur, safe_float_strict
 
 
-def _money(row_norm: Dict[str, str], aliases: tuple, row_idx: int) -> float:
+def _money(row_norm: dict[str, str], aliases: tuple, row_idx: int) -> float:
     """Parses an optional money field truthfully.
 
     Absent/blank cell -> 0.0; present-but-unparseable -> ValueError naming the
@@ -40,14 +41,14 @@ def _money(row_norm: Dict[str, str], aliases: tuple, row_idx: int) -> float:
         except ValueError:
             raise ValueError(
                 f"Row {row_idx}: column '{alias}' has unparseable amount {raw!r}"
-            )
+            ) from None
     return 0.0
 
 
-def parse_csv_purchases(csv_path: str) -> List[Dict[str, Any]]:
+def parse_csv_purchases(csv_path: str) -> list[dict[str, Any]]:
     """Parses standard CSV purchase register."""
-    purchases: List[Dict[str, Any]] = []
-    with open(csv_path, "r", encoding="utf-8-sig") as f:
+    purchases: list[dict[str, Any]] = []
+    with open(csv_path, encoding="utf-8-sig") as f:
         reader = csv.DictReader(f)
         rows = list(reader)
 
@@ -135,7 +136,7 @@ def main():
         if lower_file.endswith(".csv"):
             purchases = parse_csv_purchases(input_file)
         elif lower_file.endswith(".json"):
-            with open(input_file, "r", encoding="utf-8") as f:
+            with open(input_file, encoding="utf-8") as f:
                 loaded = json.load(f)
             # Accept either a bare list or an already-wrapped document; never
             # double-wrap into {"purchases": {"purchases": [...]}}.

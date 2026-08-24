@@ -199,7 +199,7 @@ HTML_TEMPLATE_GSTR3B = """
 <div style="clear:both;"></div>
 
 <div class="footer">
-  Generated deterministically by gstr-wala Engine Suite • GST Portal Offline Utility v3.x Compatible
+  Generated deterministically by gstr-wala Engine Suite • Offline-Tool-Shaped Output (verify via GSTN Returns Offline Tool)
 </div>
 
 </body>
@@ -280,7 +280,7 @@ def generate_pdf(g3b_data: dict[str, Any], output_pdf_path: str) -> bool:
         HTML(string=rendered_html).write_pdf(output_pdf_path)
         print(f"SUCCESS: Generated PDF Filing Statement -> '{output_pdf_path}'")
         return True
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         print(f"Notice: Saved HTML statement -> '{html_path}' (Weasyprint note: {e})")
         return False
 
@@ -293,7 +293,7 @@ def main():
     input_file = sys.argv[1]
     out_pdf = sys.argv[2] if len(sys.argv) > 2 else "output/gstr3b_statement.pdf"
 
-    with open(input_file, "r", encoding="utf-8") as f:
+    with open(input_file, encoding="utf-8") as f:
         data = json.load(f)
 
     generate_pdf(data, out_pdf)

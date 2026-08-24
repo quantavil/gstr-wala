@@ -11,6 +11,8 @@
 
 
 ## Blunder Log (Root Cause + Fix)
+- **2026-08-25:** Audit closure round — wired Sec 50 interest & Sec 47 late fee into the bridge/pipeline (`populate_statutory_dues`, respects user-supplied values), held value-mismatch ITC out of Table 4(A)(5) into a review bucket (`table_4_a_5_value_mismatch_hold`), made portal JSON version tags overridable and softened 'official GSTN' claims to 'offline-tool-shaped' (token unverified against live portal), wired `reload_manifest()` into `apply_compliance_patch`, exposed `--cutoff` on the Typer reconcile CLI, extended 16(4) fp lookup to `docdata.fp`, removed duplicated `format_table` shims, loosened flaky wall-clock scale assertion (1.5s→5s smoke bound) that was breaking the radar's inner verification run. Tests 204→210.
+- **2026-08-25:** Audit Remediation — Separated tax cash liability from interest/late fees in GSTR-3B Table 6.1 `tx_pmt` (`cash_tax_payable`), aligned blocked HSN list across `reconcile_gstr2b` and `constants.BLOCKED_HSNS` (`8704, 9966, 9967`), enabled Section 16(4) reproducible evaluation from return period (`fp`) and added `--cutoff` CLI option, fixed bridge CLI argument sniffing when pre-existing output files lack '3b', emitted mandatory `rt` in GSTR-1 Table 12 HSN offline JSON, normalized single-digit POS ('7'->'07') across Pydantic models and validator, configured `[tool.ruff]` lint gate with 0 errors, created GitHub Actions CI workflow, and added dynamic `reload_manifest()`. Added regression tests (198→204).
 - **2026-08-24:** Reliability hardening — made `gst_engine.compute_gstr1_tables` pure (copy-on-write `inv_view`), unified `reconcile_fast` empty shape + dedup, wired `constants.B2CL_THRESHOLD/DRC` to `rules_manifest.json` single source, hardened `compliance_radar` nested allowlist/bounds/finite/atomic-save, removed credential scan false positives `sek`/`token`, capped PDF `dpi 72-300` + `doc.close()` + relative paths, enabled Jinja `autoescape`, validated `derive_gstr3b_due_date` and `compute` dispatch + interest remainder 1p. Added 13 reliability regression tests (49→62). Updated README/SKILL/AGENT counts.
 - **2026-08-24:** Standardized repository file naming across scripts, tests, references, and output artifacts (e.g. `ingest_pdf_vision.py`, `reconcile_gstr2b.py`, `reconcile_fast.py`, `bridge_gstr1_to_gstr3b.py`, `discover_statutory_rules.py`).
 - **2026-08-24:** Unified PDF processing stack on PyMuPDF (`pymupdf`), removing `pdfplumber` and `pypdfium2` (-51MB venv, 0 transitive crypto CVEs), adding smart digital text vs scanned vision auto-detection and `--force-image` mode.
@@ -41,6 +43,6 @@
 - `scripts/generate_pdf_statement.py`: Jinja2 + WeasyPrint certified CA statement generator.
 - `scripts/discover_statutory_rules.py`: Live statutory compliance discovery radar.
 - `scripts/compliance_radar.py`: Self-updating statutory rule engine.
-- `tests/`: 62 Pytest unit, integration, property (Hypothesis), contract, and fuzz tests (100% pass via `uv run pytest`).
+- `tests/`: 210 Pytest unit, integration, property (Hypothesis), contract, and fuzz tests (100% pass via `uv run pytest`).
 
 

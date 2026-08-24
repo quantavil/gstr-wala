@@ -6,7 +6,7 @@ Features:
   2. Clean Folder Organization: Creates a dedicated subfolder per document:
      `work/images/<doc_name>/page_001.png`
      `work/images/<doc_name>/page_002.png`
-  3. High-Fidelity Rendering: Uses `pymupdf` (MuPDF C engine) at configurable DPI (150–300 DPI).
+  3. High-Fidelity Rendering: Uses `pymupdf` (MuPDF C engine) at configurable DPI (150-300 DPI).
   4. Smart Auto-Detection: Automatically detects digital text presence vs scanned image photocopies.
   5. Force Image Mode: Optional `--force-image` flag to enforce visual pipeline on all pages.
   6. Manifest Index: Generates `work/images/image_manifest.json` with page mapping, image links,
@@ -21,7 +21,7 @@ import json
 import os
 import re
 import sys
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 # Ensure root directory is on sys.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -40,7 +40,7 @@ def convert_multipage_pdf(
     dpi: int = 200,
     extract_text: bool = True,
     force_image: bool = False
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Splits and renders every page of a multi-page PDF into dedicated image files with smart strategy detection."""
     # DPI cap 72-300 for reliability
     if dpi < 72:
@@ -57,7 +57,7 @@ def convert_multipage_pdf(
         num_pages = len(doc)
         # Guard pages >500 skip rendering to avoid resource exhaustion
         if num_pages > 500:
-            rendered_pages: List[Dict[str, Any]] = []
+            rendered_pages: list[dict[str, Any]] = []
         else:
             rendered_pages = []
             # Render every single page: Page 1, Page 2, ... Page N
@@ -126,7 +126,7 @@ def batch_convert_all_documents(
     output_dir: str = "work/images",
     dpi: int = 200,
     force_image: bool = False
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Scans and batch processes all single and multi-page PDFs."""
     # DPI cap 72-300 for reliability
     if dpi < 72:

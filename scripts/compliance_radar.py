@@ -51,7 +51,7 @@ def load_rules_manifest() -> dict[str, Any]:
     """Loads active statutory rules manifest."""
     if not os.path.exists(MANIFEST_PATH):
         raise FileNotFoundError(f"Rules manifest not found at: {MANIFEST_PATH}")
-    with open(MANIFEST_PATH, "r", encoding="utf-8") as f:
+    with open(MANIFEST_PATH, encoding="utf-8") as f:
         return json.load(f)
 
 
@@ -75,7 +75,7 @@ def run_self_verification() -> bool:
     root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
     env = os.environ.copy()
     env["GSTR_WALA_SELF_VERIFY"] = "1"
-    cmd = [sys.executable, "-m", "pytest", "tests/", "-q"]
+    cmd = [sys.executable, "-m", "pytest", "tests/", "-q", "-o", "addopts="]
     try:
         res = subprocess.run(cmd, cwd=root_dir, capture_output=True, text=True, timeout=300, env=env, check=False)
         return res.returncode == 0
@@ -186,7 +186,7 @@ def apply_compliance_patch(patch_file: str) -> bool:
         return False
 
     try:
-        with open(patch_file, "r", encoding="utf-8") as f:
+        with open(patch_file, encoding="utf-8") as f:
             patch_data = json.load(f)
     except (OSError, json.JSONDecodeError) as e:
         print(f"Error: failed to load patch '{patch_file}': {e}")
@@ -234,6 +234,12 @@ def apply_compliance_patch(patch_file: str) -> bool:
     # Run Automated Verification Gate
     print("\n[Step 2/2] Running Automated Verification Gate (Pytest & Invariant Fuzzer)...")
     success = run_self_verification()
+
+    # Refresh import-time statutory constants so the running process reflects
+    # whatever is now on disk (patched or rolled back).
+    from scripts.constants import reload_manifest
+
+    reload_manifest()
 
     if success:
         print("\n[SUCCESS] Core business scenarios & invariant tests PASSED!")

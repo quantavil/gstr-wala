@@ -22,7 +22,12 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from typing import Any
 
 from scripts.constants import DRC_01B_AMT, DRC_01B_PCT, DRC_01C_AMT, DRC_01C_PCT
-from scripts.gst_engine import compute_gstr1_tables
+from scripts.gst_engine import (
+    compute_gstr1_tables,
+    compute_statutory_interest,
+    compute_statutory_late_fee,
+)
+from scripts.itc_optimizer import optimize_from_input_dict
 from scripts.utils import round_cur
 
 
@@ -263,6 +268,50 @@ def bridge_gstr1_and_2b_to_3b(
         "opening_cash_ledger": opening_cash_ledger or {"iamt": 0.0, "camt": 0.0, "samt": 0.0, "csamt": 0.0}
     }
 
+    return populate_statutory_dues(gstr3b_input)
+
+
+def populate_statutory_dues(gstr3b_input: dict[str, Any]) -> dict[str, Any]:
+    """Computes Section 50 interest and Section 47 late fee from due/filing dates and
+    wires them into the GSTR-3B input so the set-off optimizer and PMT-06 challan
+    include statutory dues.
+
+    - Net cash liability for Sec 50(1) = cash tax payable from the current set-off
+      position (pre-interest), per itc_optimizer.cash_tax_payable.
+    - User-supplied interest_details / late_fee_details are never overwritten.
+    - Absent or equal dates produce zero delay -> no keys are added.
+    """
+    intr_details = gstr3b_input.get("interest_details") or {}
+    lf_details = gstr3b_input.get("late_fee_details") or {}
+
+    due_date = gstr3b_input.get("due_date")
+    filing_date = gstr3b_input.get("filing_date")
+
+    if not intr_details:
+        intr = compute_statutory_interest(
+            optimize_from_input_dict(gstr3b_input)["cash_tax_payable"]["total"],
+            due_date,
+            filing_date,
+        )
+        if intr["interest_amount"] > 0.0:
+            gstr3b_input["interest_details"] = {"interest_amount": intr["interest_amount"]}
+
+    if not lf_details:
+        outward = gstr3b_input.get("outward_supplies", {})
+        total_outward_tax = sum(
+            float(outward.get(section, {}).get(head, 0.0))
+            for section in ("taxable", "zero_rated")
+            for head in ("iamt", "camt", "samt", "csamt")
+        )
+        lf = compute_statutory_late_fee(
+            is_nil_return=(total_outward_tax == 0.0),
+            turnover_slab=gstr3b_input.get("turnover_slab", "upto_1.5cr"),
+            due_date_str=due_date,
+            filing_date_str=filing_date,
+        )
+        if lf["total_late_fee"] > 0.0:
+            gstr3b_input["late_fee_details"] = {"camt": lf["camt"], "samt": lf["samt"]}
+
     return gstr3b_input
 
 
@@ -338,20 +387,34 @@ def main() -> None:
     if args.pos_args:
         if len(args.pos_args) == 1:
             arg0 = args.pos_args[0]
-            if not recon_file and ("recon" in arg0.lower() or (os.path.exists(arg0) and "3b" not in arg0.lower())):
+            if args.recon_opt:
+                out_file = arg0
+            elif args.out_opt:
                 recon_file = arg0
             else:
-                out_file = arg0
+                is_recon = False
+                if os.path.exists(arg0) and "3b" not in arg0.lower():
+                    try:
+                        with open(arg0, encoding="utf-8") as f_check:
+                            sample = json.load(f_check)
+                            if isinstance(sample, dict) and ("gstr3b_table_4_auto_population" in sample or "summary" in sample):
+                                is_recon = True
+                    except Exception:
+                        is_recon = False
+                if is_recon:
+                    recon_file = arg0
+                else:
+                    out_file = arg0
         elif len(args.pos_args) >= 2:
             recon_file = args.pos_args[0] if not recon_file else recon_file
             out_file = args.pos_args[1]
 
-    with open(g1_file, "r", encoding="utf-8") as f:
+    with open(g1_file, encoding="utf-8") as f:
         g1_data = json.load(f)
 
     recon_data = None
     if recon_file and os.path.exists(recon_file):
-        with open(recon_file, "r", encoding="utf-8") as f:
+        with open(recon_file, encoding="utf-8") as f:
             recon_data = json.load(f)
 
     g3b_input = bridge_gstr1_and_2b_to_3b(g1_data, recon_data)

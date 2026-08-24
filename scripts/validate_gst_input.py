@@ -45,7 +45,7 @@ def is_valid_gstin(gstin: str) -> tuple[bool, str | None]:
     state_code = gstin[:2]
     if state_code not in STATE_CODES:
         return False, f"Invalid State Code '{state_code}' in GSTIN '{gstin}'"
-    
+
     # Verify Mod-36 Checksum
     expected_check = compute_gstin_checksum(gstin[:14])
     if gstin[14] != expected_check:
@@ -124,14 +124,15 @@ def validate_gstr1_input(data: dict[str, Any]) -> ValidationResult:
             try:
                 from datetime import datetime
 
-                datetime.strptime(idt, "%d-%m-%Y")  # noqa: DTZ007
+                datetime.strptime(idt, "%d-%m-%Y")
             except ValueError:
                 result.error(f"{prefix}: Invalid calendar date '{idt}'")
 
         # POS validation
-        pos = inv.get("pos")
+        pos_raw = inv.get("pos")
+        pos = str(pos_raw).strip().zfill(2) if pos_raw is not None and str(pos_raw).strip() else None
         if not pos or pos not in STATE_CODES:
-            result.error(f"{prefix}: Invalid Place of Supply (POS) code '{pos}'")
+            result.error(f"{prefix}: Invalid Place of Supply (POS) code '{pos_raw}'")
 
         # Recipient GSTIN check (for B2B)
         ctin = inv.get("ctin")
@@ -249,7 +250,7 @@ def validate_gstr3b_input(data: dict[str, Any]) -> ValidationResult:
                 try:
                     from datetime import datetime
 
-                    datetime.strptime(data[dt_field], "%d-%m-%Y")  # noqa: DTZ007
+                    datetime.strptime(data[dt_field], "%d-%m-%Y")
                 except ValueError:
                     result.error(f"Invalid calendar date for '{dt_field}': '{data[dt_field]}'")
 
@@ -334,7 +335,7 @@ def validate_file(file_path: str) -> ValidationResult:
         return res
 
     try:
-        with open(file_path, "r", encoding="utf-8") as f:
+        with open(file_path, encoding="utf-8") as f:
             data = json.load(f)
     except (OSError, json.JSONDecodeError) as e:
         res = ValidationResult()

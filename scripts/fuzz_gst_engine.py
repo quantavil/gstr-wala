@@ -14,8 +14,6 @@ Usage:
 
 import argparse
 import random
-import sys
-from typing import Any, Dict, List, Literal
 
 from scripts.itc_optimizer import optimize_setoff
 from scripts.models import TaxAmounts

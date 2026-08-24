@@ -59,7 +59,7 @@ All engines live in `scripts/`, reference guides in `references/`, schemas in `s
   ```bash
   uv run pytest -q
   ```
-  Expect all 62 tests to pass. If any test fails, stop immediately.
+  Expect all 210 tests to pass. If any test fails, stop immediately.
 - Confirm session parameters:
   - Taxpayer GSTIN & State
   - Return Period (e.g. `042026` for April 2026)
@@ -131,7 +131,7 @@ Ask the user to drop their records into `docs/`:
   ```bash
   python3 scripts/gst_engine.py work/gstr1_input.json
   ```
-- Generate official GST Portal GSTR-1 offline JSON:
+- Generate GSTR-1 offline-tool-shaped portal JSON:
   ```bash
   python3 scripts/generate_gstr1_json.py work/gstr1_input.json output/gstr1_portal.json
   ```
@@ -159,7 +159,7 @@ Ask the user to drop their records into `docs/`:
   - Exact Net Cash required per ledger head.
 
 ### Step 8: Generate GSTR-3B Portal JSON & CA Filing Pack / PDF
-- Generate official GST Portal GSTR-3B offline JSON:
+- Generate GSTR-3B offline-tool-shaped portal JSON:
   ```bash
   python3 scripts/generate_gstr3b_json.py work/gstr3b_input.json output/gstr3b_portal.json
   ```
@@ -208,7 +208,7 @@ Whenever a new CBIC notification or GST Council advisory is issued:
    ```bash
    python3 scripts/compliance_radar.py --apply patch.json
    ```
-   The engine stages the threshold changes in `config/rules_manifest.json`, runs all 62 test suites and invariant fuzzers, and commits the update only if 100% pass (with automatic rollback on failure).
+   The engine stages the threshold changes in `config/rules_manifest.json`, runs all 210 test suites and invariant fuzzers, and commits the update only if 100% pass (with automatic rollback on failure).
 
 
 ---
@@ -222,7 +222,7 @@ Whenever a new CBIC notification or GST Council advisory is issued:
 | Mod-36 GSTIN checksum validation & POS state checks | Explaining statutory notices & differences in plain language |
 | GSTR-2B invoice-level fuzzy matching & tolerance splits | Guiding user through portal UI step-by-step |
 | Section 50 interest per-day & Section 47 late fee caps | Helping user categorize odd or rare income/expense items |
-| Official GSTN Offline JSON formatting & PDF statements | Verifying that ARN receipts are properly archived |
+| Offline-tool-shaped JSON formatting & PDF statements | Verifying that ARN receipts are properly archived |
 
 ---
 

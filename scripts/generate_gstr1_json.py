@@ -2,7 +2,7 @@
 """Generates official GSTN Portal offline upload JSON for GSTR-1.
 
 Transforms validated canonical GSTR-1 input into the exact JSON structure required by
-the official GST Portal Offline Tool v3.x and GSTN APIs:
+the GST Portal Returns Offline Tool shape:
   - Table 4A/4B/4C/6B/6C: B2B Invoices (grouped by ctin)
   - Table 5A/5B: B2CL (Inter-state unregistered > ₹1,00,000, grouped by pos)
   - Table 6A: Exports (WPAY / WOPAY)
@@ -46,8 +46,14 @@ DOC_NUM_NAMES = {
 }
 
 
-def generate_portal_gstr1(input_data: dict[str, Any]) -> dict[str, Any]:
-    """Transforms canonical input data into official GSTN GSTR-1 offline JSON."""
+# Payload version marker. This is a gstr-wala provenance tag, NOT the GSTN
+# offline-tool token — if the portal rejects direct upload, regenerate via the
+# official Returns Offline Tool or pass portal_version with the tool's value.
+GSTR1_PORTAL_VERSION = "gstr-wala-gstr1-1.0"
+
+
+def generate_portal_gstr1(input_data: dict[str, Any], portal_version: str | None = None) -> dict[str, Any]:
+    """Transforms canonical input data into GSTN offline-tool-shaped GSTR-1 JSON."""
     comp = compute_gstr1_tables(input_data)
 
     gstin = comp["gstin"]
@@ -224,6 +230,7 @@ def generate_portal_gstr1(input_data: dict[str, Any]) -> dict[str, Any]:
             "qty": h["qty"],
             "val": h["val"],
             "txval": h["txval"],
+            "rt": float(h.get("rt", 0.0)),
             "iamt": h["iamt"],
             "camt": h["camt"],
             "samt": h["samt"],
@@ -271,9 +278,9 @@ def generate_portal_gstr1(input_data: dict[str, Any]) -> dict[str, Any]:
         }
     }
 
-    # Complete Official GSTN JSON Schema
+    # Complete offline-tool-shaped portal JSON
     return {
-        "version": "gstr-wala-gstr1-1.0",
+        "version": portal_version or GSTR1_PORTAL_VERSION,
         "gstin": gstin,
         "fp": fp,
         "gt": gt,
@@ -308,7 +315,7 @@ def main():
     if not os.path.exists(input_file):
         sys.exit(f"Error: File '{input_file}' not found.")
 
-    with open(input_file, "r", encoding="utf-8") as f:
+    with open(input_file, encoding="utf-8") as f:
         data = json.load(f)
 
     val_res = validate_gstr1_input(data)

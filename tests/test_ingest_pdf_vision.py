@@ -1,10 +1,11 @@
 """Pytest suite for Multi-Page PDF to Image Page-by-Page Splitter."""
 
 import os
-import pytest
-from scripts.ingest_pdf_vision import convert_multipage_pdf, batch_convert_all_documents
-from scripts.generate_pdf_statement import generate_pdf
 
+import pytest
+
+from scripts.generate_pdf_statement import generate_pdf
+from scripts.ingest_pdf_vision import batch_convert_all_documents, convert_multipage_pdf
 
 
 def test_multipage_pdf_page_by_page_splitting(tmp_path):
@@ -67,7 +68,9 @@ def test_batch_convert_multi_document_manifest(tmp_path):
 
 
 def test_ingest_relative_paths_and_dpi_cap(tmp_path):
-    import pymupdf, json
+    import json
+
+    import pymupdf
     doc=pymupdf.open()
     doc.new_page()
     pdf=tmp_path/"a.pdf"

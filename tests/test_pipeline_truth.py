@@ -43,7 +43,7 @@ G3B_SCHEMA_PATH = os.path.join(REPO_ROOT, "schemas", "gstr3b_portal_schema.json"
 class TestSchemaEnforcement:
     def test_gstr1_portal_json_validates_cleanly(self):
         sales_path = os.path.join(REPO_ROOT, "examples", "sample_sales_register.json")
-        with open(sales_path, "r", encoding="utf-8") as f:
+        with open(sales_path, encoding="utf-8") as f:
             data = json.load(f)
         portal_payload = generate_portal_gstr1(data)
         assert portal_payload.get("version") == "gstr-wala-gstr1-1.0"
@@ -52,7 +52,7 @@ class TestSchemaEnforcement:
 
     def test_gstr3b_portal_json_validates_cleanly(self):
         g3b_path = os.path.join(REPO_ROOT, "examples", "sample_gstr3b_portal.json")
-        with open(g3b_path, "r", encoding="utf-8") as f:
+        with open(g3b_path, encoding="utf-8") as f:
             data = json.load(f)
         # Generate canonical 3B and portal JSON
         portal_payload = generate_portal_gstr3b(data)
@@ -107,7 +107,7 @@ class TestPdfHonesty:
         generate_pdf(payload, out_pdf)
         html_file = out_pdf.replace(".pdf", ".html")
         assert os.path.exists(html_file)
-        with open(html_file, "r", encoding="utf-8") as f:
+        with open(html_file, encoding="utf-8") as f:
             html = f.read()
         assert "20-05-2026" not in html
         assert "—" in html
@@ -285,12 +285,12 @@ class TestFilingPackConsistency:
         assert os.path.exists(recon_pack)
 
         # Check Table 4(A)(3) in GSTR-3B pack
-        with open(g3b_pack, "r", encoding="utf-8") as f:
+        with open(g3b_pack, encoding="utf-8") as f:
             g3b_text = f.read()
         assert "4(A)(3) Inward Supplies (RCM)" in g3b_text
 
         # Check single-axis description in Recon report
-        with open(recon_pack, "r", encoding="utf-8") as f:
+        with open(recon_pack, encoding="utf-8") as f:
             recon_text = f.read()
         assert "single-axis +/- ₹1.00 tax tolerance" in recon_text
 
@@ -316,9 +316,9 @@ class TestCliEndToEnd:
         # Verify artifacts
         g1_portal = os.path.join(out_dir, "gstr1_portal.json")
         g3b_portal = os.path.join(out_dir, "gstr3b_portal.json")
-        with open(g1_portal, "r", encoding="utf-8") as f:
+        with open(g1_portal, encoding="utf-8") as f:
             g1_p = json.load(f)
-        with open(g3b_portal, "r", encoding="utf-8") as f:
+        with open(g3b_portal, encoding="utf-8") as f:
             g3b_p = json.load(f)
 
         assert validate_against_schema(g1_p, G1_SCHEMA_PATH) == []

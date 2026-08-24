@@ -12,10 +12,10 @@ import sys
 # Ensure root directory is on sys.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from typing import Any, Dict, List
-from scripts.reconcile_gstr2b import flatten_gstr2b, format_table
-from scripts.utils import safe_float
+from typing import Any
 
+from scripts.reconcile_gstr2b import flatten_gstr2b
+from scripts.utils import format_table, safe_float
 
 
 def main():
@@ -27,7 +27,7 @@ def main():
     if not os.path.exists(file_path):
         sys.exit(f"Error: File '{file_path}' not found.")
 
-    with open(file_path, "r", encoding="utf-8") as f:
+    with open(file_path, encoding="utf-8") as f:
         data = json.load(f)
 
     records = flatten_gstr2b(data)
@@ -43,7 +43,7 @@ def main():
     print("=" * 70)
     print(f" GSTR-2B SUMMARY: {data.get('gstin', '')} (Period: {data.get('fp', '')})")
     print("=" * 70)
-    summary_rows: List[List[Any]] = [
+    summary_rows: list[list[Any]] = [
         ["Total Invoices / Records", len(records)],
         ["Total Taxable Value", f"₹{tot_txval:,.2f}"],
         ["Integrated Tax (IGST)", f"₹{tot_iamt:,.2f}"],

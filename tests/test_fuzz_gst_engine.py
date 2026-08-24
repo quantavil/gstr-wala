@@ -1,6 +1,5 @@
 """Pytest integration for property-based fuzzer."""
 
-import pytest
 from scripts.fuzz_gst_engine import run_fuzzer
 
 

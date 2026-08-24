@@ -116,6 +116,7 @@
               "qty": { "type": "number" },
               "val": { "type": "number" },
               "txval": { "type": "number" },
+              "rt": { "type": "number" },
               "iamt": { "type": "number" },
               "camt": { "type": "number" },
               "samt": { "type": "number" },

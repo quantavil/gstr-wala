@@ -27,10 +27,12 @@ from typing import Any
 # Ensure root directory is on sys.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+from scripts.constants import BLOCKED_HSNS
 from scripts.utils import (
     extract_trailing_digits_cached as extract_trailing_digits,
 )
 from scripts.utils import (
+    format_table,
     normalize_date_str,
     round_cur,
     safe_float,
@@ -95,6 +97,12 @@ def _extract_item_amounts(itm: Any) -> tuple[float, float, float, float, float]:
     return txval, iamt, camt, samt, csamt
 
 
+def _resolve_docdata(g2b_data: dict[str, Any]) -> dict[str, Any]:
+    """Resolves the docdata block from the various official/legacy GSTR-2B nestings."""
+    block = g2b_data.get("data", {}).get("docdata", g2b_data.get("docdata", g2b_data))
+    return block if isinstance(block, dict) else {}
+
+
 def flatten_gstr2b(g2b_data: dict[str, Any]) -> list[dict[str, Any]]:
     """Flattens nested official GSTR-2B JSON into a flat list of normalized invoice records.
 
@@ -102,8 +110,8 @@ def flatten_gstr2b(g2b_data: dict[str, Any]) -> list[dict[str, Any]]:
     (b2ba, cdna, isda). Shape-tolerant for both official GSTN portal nesting (itms[].itm_det)
     and flat item arrays. Amendments supersede original documents for the period.
     """
-    data_block = g2b_data.get("data", {}).get("docdata", g2b_data.get("docdata", g2b_data))
-    if not isinstance(data_block, dict):
+    data_block = _resolve_docdata(g2b_data)
+    if not data_block:
         return []
 
     b2b_records: list[dict[str, Any]] = []
@@ -503,7 +511,7 @@ def _classify_books_invoice(
     tot_tax = round_cur(iamt + camt + samt + csamt)
 
     is_blocked = bool(pr_inv.get("is_blocked_17_5", False)) or (
-        str(pr_inv.get("hsn_sc", "")).strip() in ["8702", "8703", "9963", "9965"]
+        str(pr_inv.get("hsn_sc", "")).strip() in BLOCKED_HSNS
     )
     ud = safe_int(pr_inv.get("unpaid_days", 0))
     is_unpaid_180 = ud > 180 or bool(pr_inv.get("rule_37_reversal"))
@@ -547,6 +555,17 @@ def reconcile(
       gstr2b_raw: Raw official GSTR-2B JSON payload from the GST portal.
       _16_4_cutoff: Optional ISO or DD-MM-YYYY evaluation cutoff date for Section 16(4).
     """
+    effective_cutoff = _16_4_cutoff
+    if not effective_cutoff and isinstance(gstr2b_raw, dict):
+        docdata = _resolve_docdata(gstr2b_raw)
+        fp = gstr2b_raw.get("fp") or gstr2b_raw.get("data", {}).get("fp") or docdata.get("fp")
+        if fp and len(str(fp)) == 6 and str(fp).isdigit():
+            mm = int(str(fp)[:2])
+            yyyy = int(str(fp)[2:])
+            next_mm = mm + 1 if mm < 12 else 1
+            next_yyyy = yyyy if mm < 12 else yyyy + 1
+            effective_cutoff = f"20-{next_mm:02d}-{next_yyyy}"
+
     g2b_records = flatten_gstr2b(gstr2b_raw)
 
     matched: list[dict[str, Any]] = []
@@ -601,7 +620,7 @@ def reconcile(
         trail_in = extract_trailing_digits(norm_in)
 
         is_blocked, is_unpaid_180, is_16_4, tot_tax, txval = _classify_books_invoice(
-            pr_inv, _16_4_cutoff
+            pr_inv, effective_cutoff
         )
 
         candidates = _find_match_candidates(
@@ -759,11 +778,21 @@ def reconcile(
     isd_s = sum(r.get("samt", 0.0) for r in isd_inward_2b)
     isd_cs = sum(r.get("csamt", 0.0) for r in isd_inward_2b)
 
-    # Table 4(A)(5) All Other ITC (excluding RCM/ISD/IMPG)
-    claim_i = sum(m["gstr2b_invoice"]["iamt"] for m in matched + tolerance_matched if m["gstr2b_invoice"]["section"] not in ["IMPG", "IMPGSEZ", "ISD", "ISDA"]) + sum(min(safe_float(m["books_invoice"].get("iamt", 0.0)), m["gstr2b_invoice"]["iamt"]) for m in value_mismatches)
-    claim_c = sum(m["gstr2b_invoice"]["camt"] for m in matched + tolerance_matched if m["gstr2b_invoice"]["section"] not in ["IMPG", "IMPGSEZ", "ISD", "ISDA"]) + sum(min(safe_float(m["books_invoice"].get("camt", 0.0)), m["gstr2b_invoice"]["camt"]) for m in value_mismatches)
-    claim_s = sum(m["gstr2b_invoice"]["samt"] for m in matched + tolerance_matched if m["gstr2b_invoice"]["section"] not in ["IMPG", "IMPGSEZ", "ISD", "ISDA"]) + sum(min(safe_float(m["books_invoice"].get("samt", 0.0)), m["gstr2b_invoice"]["samt"]) for m in value_mismatches)
-    claim_cs = sum(m["gstr2b_invoice"]["csamt"] for m in matched + tolerance_matched if m["gstr2b_invoice"]["section"] not in ["IMPG", "IMPGSEZ", "ISD", "ISDA"]) + sum(min(safe_float(m["books_invoice"].get("csamt", 0.0)), m["gstr2b_invoice"]["csamt"]) for m in value_mismatches)
+    # Table 4(A)(5) All Other ITC (excluding RCM/ISD/IMPG).
+    # Value mismatches are NOT auto-claimed: their ITC is held in a review bucket
+    # (see table_4_a_5_value_mismatch_hold) pending user confirmation, per the
+    # "never claim unverified ITC" rule.
+    matched_or_tol = [m for m in matched + tolerance_matched if m["gstr2b_invoice"]["section"] not in ["IMPG", "IMPGSEZ", "ISD", "ISDA"]]
+    claim_i = sum(m["gstr2b_invoice"]["iamt"] for m in matched_or_tol)
+    claim_c = sum(m["gstr2b_invoice"]["camt"] for m in matched_or_tol)
+    claim_s = sum(m["gstr2b_invoice"]["samt"] for m in matched_or_tol)
+    claim_cs = sum(m["gstr2b_invoice"]["csamt"] for m in matched_or_tol)
+
+    # Value-mismatch ITC held for manual review (conservative min(books, 2B) per head)
+    hold_i = sum(min(safe_float(m["books_invoice"].get("iamt", 0.0)), m["gstr2b_invoice"]["iamt"]) for m in value_mismatches)
+    hold_c = sum(min(safe_float(m["books_invoice"].get("camt", 0.0)), m["gstr2b_invoice"]["camt"]) for m in value_mismatches)
+    hold_s = sum(min(safe_float(m["books_invoice"].get("samt", 0.0)), m["gstr2b_invoice"]["samt"]) for m in value_mismatches)
+    hold_cs = sum(min(safe_float(m["books_invoice"].get("csamt", 0.0)), m["gstr2b_invoice"]["csamt"]) for m in value_mismatches)
 
     # Permanent Reversal Table 4(B)(1)
     rev_perm_i = sum(b["gstr2b_invoice"]["iamt"] for b in blocked_17_5)
@@ -804,7 +833,8 @@ def reconcile(
             "ineligible_2b_count": len(ineligible_2b),
             "rcm_inward_count": len(rcm_inward_2b),
             "isd_count": len(isd_inward_2b),
-            "impg_count": len(impg_inward_2b)
+            "impg_count": len(impg_inward_2b),
+            "value_mismatch_itc_held_total": round_cur(hold_i + hold_c + hold_s + hold_cs)
         },
         "gstr3b_table_4_auto_population": {
             "table_4_a_1_import_goods": {
@@ -822,6 +852,11 @@ def reconcile(
             "table_4_a_5_all_other_itc": {
                 "iamt": round_cur(claim_i), "camt": round_cur(claim_c), "samt": round_cur(claim_s), "csamt": round_cur(claim_cs),
                 "total": round_cur(claim_i + claim_c + claim_s + claim_cs)
+            },
+            "table_4_a_5_value_mismatch_hold": {
+                "iamt": round_cur(hold_i), "camt": round_cur(hold_c), "samt": round_cur(hold_s), "csamt": round_cur(hold_cs),
+                "total": round_cur(hold_i + hold_c + hold_s + hold_cs),
+                "note": "Excluded from Table 4(C) pending user review of value mismatches"
             },
             "table_4_b_1_permanent_reversals_17_5": {
                 "iamt": round_cur(rev_perm_i), "camt": round_cur(rev_perm_c), "samt": round_cur(rev_perm_s), "csamt": round_cur(rev_perm_cs),
@@ -866,27 +901,27 @@ def reconcile(
     }
 
 
-def format_table(headers: list[str], rows: list[list[Any]]) -> str:
-    from scripts.utils import format_table as _ft
-
-    return _ft(headers, rows)
-
-
 def main():
-    if len(sys.argv) < 3:
-        print("Usage: python3 reconcile_gstr2b.py <purchase_register.json> <gstr2b.json> [--json]")
-        sys.exit(1)
+    import argparse
 
-    pr_file = sys.argv[1]
-    g2b_file = sys.argv[2]
-    json_output = "--json" in sys.argv
+    parser = argparse.ArgumentParser(description="Reconcile Purchase Register against GSTR-2B")
+    parser.add_argument("purchase_register", help="Path to purchase register JSON")
+    parser.add_argument("gstr2b", help="Path to GSTR-2B JSON")
+    parser.add_argument("--json", action="store_true", help="Output raw JSON format")
+    parser.add_argument("--cutoff", default=None, help="Section 16(4) evaluation cutoff date (DD-MM-YYYY)")
+
+    args = parser.parse_args()
+    pr_file = args.purchase_register
+    g2b_file = args.gstr2b
+    json_output = args.json
+    cutoff = args.cutoff
 
     if not os.path.exists(pr_file) or not os.path.exists(g2b_file):
         sys.exit("Error: Input files not found.")
 
-    with open(pr_file, "r", encoding="utf-8") as f:
+    with open(pr_file, encoding="utf-8") as f:
         pr_data = json.load(f)
-    with open(g2b_file, "r", encoding="utf-8") as f:
+    with open(g2b_file, encoding="utf-8") as f:
         g2b_data = json.load(f)
 
     if isinstance(pr_data, dict):
@@ -897,7 +932,7 @@ def main():
     else:
         pr_list = []
 
-    result = reconcile(pr_list, g2b_data)
+    result = reconcile(pr_list, g2b_data, _16_4_cutoff=cutoff)
 
     if json_output:
         print(json.dumps(result, indent=2))
@@ -913,6 +948,7 @@ def main():
             ["Exact Matched Invoices", s["exact_matched_count"]],
             ["Tolerance Matched Invoices (tax within ±₹1)", s["tolerance_matched_count"]],
             ["Value Mismatches (Flagged)", s["value_mismatch_count"]],
+            ["Value-Mismatch ITC Held for Review", f"₹{s['value_mismatch_itc_held_total']:,.2f}"],
             ["In Books Only (Rule 36(4) Deferred)", s["in_books_only_count"]],
             ["In 2B Only (Unrecorded Purchases)", s["in_2b_only_count"]],
             ["Section 17(5) Blocked Credit", s["blocked_17_5_count"]],

@@ -20,8 +20,9 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 import jsonschema
 
-from scripts.gst_engine import compute_gstr1_tables, format_table
+from scripts.gst_engine import compute_gstr1_tables
 from scripts.itc_optimizer import optimize_from_input_dict
+from scripts.utils import format_table
 
 
 def validate_against_schema(payload: dict[str, Any], schema_path: str) -> list[str]:
@@ -30,7 +31,7 @@ def validate_against_schema(payload: dict[str, Any], schema_path: str) -> list[s
         return [f"Schema file not found: '{schema_path}'"]
 
     try:
-        with open(schema_path, "r", encoding="utf-8") as f:
+        with open(schema_path, encoding="utf-8") as f:
             schema = json.load(f)
     except (OSError, json.JSONDecodeError) as e:
         return [f"Failed to read schema '{schema_path}': {e}"]
@@ -186,7 +187,7 @@ def generate_reconciliation_report(recon_data: dict[str, Any], output_path: str)
             [
                 ["Exact Matched Invoices", s.get("exact_matched_count", 0), "100% match on GSTIN, Invoice No, and Tax values"],
                 ["Tolerance Matched Invoices", s.get("tolerance_matched_count", 0), "Matched within single-axis +/- ₹1.00 tax tolerance"],
-                ["Value Mismatches", s.get("value_mismatch_count", 0), "Discrepancy in tax > ₹1.00 (Restricted claim)"],
+                ["Value Mismatches", s.get("value_mismatch_count", 0), f"Discrepancy in tax > ₹1.00 — ITC of ₹{s.get('value_mismatch_itc_held_total', 0.0):,.2f} HELD for manual review (not auto-claimed)"],
                 ["In Books Only", s.get("in_books_only_count", 0), "Supplier not filed GSTR-1 yet (Rule 36(4) Deferred)"],
                 ["In 2B Only", s.get("in_2b_only_count", 0), "Unrecorded purchases or incorrect GSTIN"],
                 ["Section 17(5) Blocked Credit", s.get("blocked_17_5_count", 0), "Permanent reversal in Table 4(B)(1)"],
@@ -223,11 +224,11 @@ def main() -> None:
     recon_file = sys.argv[3]
     out_dir = sys.argv[4] if len(sys.argv) > 4 else "output"
 
-    with open(g1_file, "r", encoding="utf-8") as f:
+    with open(g1_file, encoding="utf-8") as f:
         g1_data = json.load(f)
-    with open(g3b_file, "r", encoding="utf-8") as f:
+    with open(g3b_file, encoding="utf-8") as f:
         g3b_data = json.load(f)
-    with open(recon_file, "r", encoding="utf-8") as f:
+    with open(recon_file, encoding="utf-8") as f:
         recon_data = json.load(f)
 
     generate_gstr1_filing_pack(g1_data, os.path.join(out_dir, "gstr1_filing_pack.md"))

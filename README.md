@@ -1,12 +1,12 @@
 # gstr-wala 🇮🇳
 
-[![Tests](https://img.shields.io/badge/pytest-62%20passed-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/pytest-210%20passed-brightgreen.svg)]()
 [![Python](https://img.shields.io/badge/python-3.12%2B-blue.svg)]()
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 
 > **Deterministic AI Agent Skill & Python Engine Suite for Indian GST Compliance (GSTR-1, GSTR-3B, GSTR-2B Reconciliation, Rule 88A Optimization, Multi-Page PDF Vision Ingestion & Agentic Compliance Radar)**
 
-`gstr-wala` operates as a self-contained **AI Agent Skill (`SKILL.md`)** and standalone command-line suite for Claude Code, Codex, Gemini CLI, and Antigravity. It enables AI assistants and accountants to deterministically compute, reconcile, and generate official upload-ready GST Portal offline JSON returns and certified CA tax audit statements.
+`gstr-wala` operates as a self-contained **AI Agent Skill (`SKILL.md`)** and standalone command-line suite for Claude Code, Codex, Gemini CLI, and Antigravity. It enables AI assistants and accountants to deterministically compute, reconcile, and generate GST Portal offline-tool-shaped JSON returns and certified CA tax audit statements.
 
 ---
 
@@ -17,7 +17,7 @@
 - **GSTR-1 Outward Supply Engine:**
   - Automated Table 4 (B2B), Table 5 (B2CL > ₹1 Lakh per Notification No. 12/2024-CT), Table 6 (Exports & SEZ), Table 7 (B2CS), Table 8 (Nil/Exempt/Non-GST nested schema), Table 9 (CDNR/CDNUR), and Table 13 (Docs).
   - Table 12 HSN Summary with mandatory **Table 12A (B2B)** and **Table 12B (B2C)** bifurcation.
-  - Official GSTN Offline Utility v3.x compliant JSON generator (`output/gstr1_portal.json`).
+  - Offline-tool-shaped GSTR-1/3B JSON generators (`output/gstr1_portal.json`) — verify against the official Returns Offline Tool before upload.
 - **GSTR-2B vs Purchase Register 2-Way Matcher:**
   - High-speed vectorized join via **`polars`** and C++/SIMD fuzzy matching via **`rapidfuzz`** (100,000 invoices processed in 8.9s at 11,204 invoices/sec).
   - Multi-tier matching (`EXACT_MATCH`, `TOLERANCE_MATCH` $\pm ₹1$, `VALUE_MISMATCH`, `IN_BOOKS_ONLY`, `IN_2B_ONLY`).
@@ -123,7 +123,7 @@ gstr-wala/
 │   ├── discover_statutory_rules.py   # Live statutory discovery radar
 │   ├── compliance_radar.py           # Self-updating compliance engine
 │   └── fuzz_gst_engine.py            # Invariant property fuzzer
-├── tests/                            # 62 Pytest unit, property & fuzzer tests (100% pass)
+├── tests/                            # 210 Pytest unit, property & fuzzer tests (100% pass)
 │   ├── fixtures/                     # Authentic GSTN, ERPNext, and SME datasets
 │   ├── test_business_scenarios.py
 │   ├── test_official_gstn_compliance.py
