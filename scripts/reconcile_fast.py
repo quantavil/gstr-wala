@@ -106,8 +106,16 @@ def reconcile_polars_rapidfuzz(
         suffix="_2b"
     )
 
-    matched_book_ids = set(exact_joined["book_id"].to_list())
-    matched_g2b_ids = set(exact_joined["g2b_id"].to_list())
+    # Deduplicate many-to-many join: each g2b_id used at most once (keep first per g2b_id)
+    matched_book_ids: set = set()
+    matched_g2b_ids: set = set()
+    if exact_joined.height > 0:
+        for row in exact_joined.sort(["book_id", "g2b_id"]).iter_rows(named=True):
+            if row["g2b_id"] not in matched_g2b_ids:
+                matched_book_ids.add(row["book_id"])
+                matched_g2b_ids.add(row["g2b_id"])
+        # Keep only deduped pairs in exact_joined for consistency
+        exact_joined = exact_joined.sort(["book_id", "g2b_id"]).unique(subset=["g2b_id"], keep="first")
 
     # Filter unmatched for RapidFuzz fuzzy candidate search
     unmatched_books = [b for b in norm_books if b["book_id"] not in matched_book_ids]

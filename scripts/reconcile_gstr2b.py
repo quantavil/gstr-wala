@@ -27,7 +27,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 from typing import Any, Dict, List, Optional, Set, Tuple
 
-from scripts.utils import round_cur, normalize_inum_cached as normalize_inum, extract_trailing_digits_cached as extract_trailing_digits
+from scripts.utils import round_cur, normalize_inum_cached as normalize_inum, extract_trailing_digits_cached as extract_trailing_digits, safe_float, safe_int
 
 
 def flatten_gstr2b(g2b_data: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -196,14 +196,18 @@ def _classify_books_invoice(pr_inv: Dict[str, Any]) -> Tuple[bool, bool, float, 
     reconcile loop (lines 230-238) to enable future shared awareness with fast engine
     without rewriting engine.
     """
-    txval = float(pr_inv.get("txval", 0.0))
-    iamt = float(pr_inv.get("iamt", 0.0))
-    camt = float(pr_inv.get("camt", 0.0))
-    samt = float(pr_inv.get("samt", 0.0))
-    csamt = float(pr_inv.get("csamt", 0.0))
+    txval = safe_float(pr_inv.get("txval", 0.0))
+    iamt = safe_float(pr_inv.get("iamt", 0.0))
+    camt = safe_float(pr_inv.get("camt", 0.0))
+    samt = safe_float(pr_inv.get("samt", 0.0))
+    csamt = safe_float(pr_inv.get("csamt", 0.0))
     tot_tax = round_cur(iamt + camt + samt + csamt)
     is_blocked = pr_inv.get("is_blocked_17_5", False) or (pr_inv.get("hsn_sc") in ["8702", "8703", "9963", "9965"])
-    is_unpaid_180 = pr_inv.get("unpaid_days", 0) > 180 or pr_inv.get("rule_37_reversal", False)
+    try:
+        ud = int(float(pr_inv.get("unpaid_days", 0) or 0))
+    except Exception:
+        ud = 0
+    is_unpaid_180 = ud > 180 or bool(pr_inv.get("rule_37_reversal"))
     return is_blocked, is_unpaid_180, tot_tax, txval
 
 
