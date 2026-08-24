@@ -210,3 +210,13 @@ def test_gstr1_table_8_nested_structure():
     assert exemp["nil_supplies"]["inter_reg"] == 1000.0
     assert exemp["exptd_supplies"]["intra_unreg"] == 8000.0
     assert exemp["ngsupplies"]["intra_reg"] == 11000.0
+
+
+def test_pdf_escapes_html_in_gstin(tmp_path):
+    from scripts.generate_pdf_statement import generate_pdf
+    data = {"gstin":"<script>alert(1)</script>","ret_period":"042026","due_date":"20-05-2026","filing_date":"20-05-2026","outward_supplies":{"taxable":{"txval":0.0,"iamt":0.0,"camt":0.0,"samt":0.0,"csamt":0.0},"zero_rated":{},"rcm_inward":{}},"itc":{"available":{"all_other":{}},"reversed":{"permanent_17_5_rules":{}}},"opening_credit_ledger":{},"opening_cash_ledger":{}}
+    out=str(tmp_path/"s.pdf")
+    generate_pdf(data, out)
+    html=(tmp_path/"s.html").read_text()
+    assert "<script>" not in html
+    assert "&lt;script&gt;" in html
