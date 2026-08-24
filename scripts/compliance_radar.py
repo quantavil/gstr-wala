@@ -8,9 +8,11 @@ threshold revisions, late fee caps, DRC triggers) from CBIC notifications & GSTN
 import argparse
 import copy
 import json
+import math
 import os
 import subprocess
 import sys
+import tempfile
 from typing import Any, Dict
 
 # Ensure root directory is on sys.path
@@ -30,8 +32,18 @@ def load_rules_manifest() -> Dict[str, Any]:
 def save_rules_manifest(data: Dict[str, Any]):
     """Saves updated statutory rules manifest."""
     os.makedirs(os.path.dirname(MANIFEST_PATH), exist_ok=True)
-    with open(MANIFEST_PATH, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2)
+    dir_name = os.path.dirname(MANIFEST_PATH) or "."
+    fd, tmp_path = tempfile.mkstemp(dir=dir_name)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as tmp:
+            json.dump(data, tmp, indent=2)
+        os.replace(tmp_path, MANIFEST_PATH)
+    except Exception:
+        try:
+            os.unlink(tmp_path)
+        except Exception:
+            pass
+        raise
 
 
 def run_self_verification() -> bool:
@@ -45,7 +57,7 @@ def run_self_verification() -> bool:
     else:
         cmd = [sys.executable, "-m", "pytest", "tests/", "-k", "not test_compliance_radar", "-q"]
     try:
-        res = subprocess.run(cmd, cwd=root_dir, capture_output=True, text=True)
+        res = subprocess.run(cmd, cwd=root_dir, capture_output=True, text=True, timeout=300)
         return res.returncode == 0
     except Exception as e:
         print(f"Verification error: {e}")
@@ -58,10 +70,18 @@ def apply_compliance_patch(patch_file: str) -> bool:
         print(f"Error: Patch file '{patch_file}' not found.")
         return False
 
-    with open(patch_file, "r", encoding="utf-8") as f:
-        patch_data = json.load(f)
+    try:
+        with open(patch_file, "r", encoding="utf-8") as f:
+            patch_data = json.load(f)
+    except Exception as e:
+        print(f"Error: failed to load patch '{patch_file}': {e}")
+        return False
 
-    current_manifest = load_rules_manifest()
+    try:
+        current_manifest = load_rules_manifest()
+    except Exception as e:
+        print(f"Error: failed to load rules manifest: {e}")
+        return False
     backup_manifest = copy.deepcopy(current_manifest)
 
     print("=" * 70)
@@ -113,11 +133,10 @@ def apply_compliance_patch(patch_file: str) -> bool:
                         print(f"Error: b2cl_threshold subkey '{sub_k}' not allowlisted — abort")
                         return False
                     lo, hi = allowed[sub_k]
-                    try:
-                        fv = float(sub_v)
-                    except (TypeError, ValueError):
-                        print(f"Error: b2cl_threshold {sub_k} not numeric — abort")
+                    if isinstance(sub_v, bool) or not isinstance(sub_v, (int, float)) or not math.isfinite(sub_v):
+                        print(f"Error: b2cl_threshold {sub_k} not finite numeric — abort")
                         return False
+                    fv = float(sub_v)
                     if not (lo <= fv <= hi):
                         print(f"Error: b2cl_threshold {sub_v} out of bounds [{lo},{hi}] — abort")
                         return False
@@ -130,11 +149,10 @@ def apply_compliance_patch(patch_file: str) -> bool:
                         print(f"Error: interest_rates subkey '{sub_k}' not allowlisted — abort")
                         return False
                     lo, hi = allowed[sub_k]
-                    try:
-                        fv = float(sub_v)
-                    except (TypeError, ValueError):
-                        print(f"Error: interest_rates {sub_k} not numeric — abort")
+                    if isinstance(sub_v, bool) or not isinstance(sub_v, (int, float)) or not math.isfinite(sub_v):
+                        print(f"Error: interest_rates {sub_k} not finite numeric — abort")
                         return False
+                    fv = float(sub_v)
                     if not (lo <= fv <= hi):
                         print(f"Error: interest_rates {sub_k} {sub_v} out of bounds [{lo},{hi}] — abort")
                         return False
@@ -147,11 +165,10 @@ def apply_compliance_patch(patch_file: str) -> bool:
                         print(f"Error: late_fee_caps subkey '{sub_k}' not allowlisted — abort")
                         return False
                     lo, hi = allowed[sub_k]
-                    try:
-                        fv = float(sub_v)
-                    except (TypeError, ValueError):
-                        print(f"Error: late_fee_caps {sub_k} not numeric — abort")
+                    if isinstance(sub_v, bool) or not isinstance(sub_v, (int, float)) or not math.isfinite(sub_v):
+                        print(f"Error: late_fee_caps {sub_k} not finite numeric — abort")
                         return False
+                    fv = float(sub_v)
                     if not (lo <= fv <= hi):
                         print(f"Error: late_fee_caps {sub_k} {sub_v} out of bounds [{lo},{hi}] — abort")
                         return False
@@ -169,24 +186,25 @@ def apply_compliance_patch(patch_file: str) -> bool:
                         return False
                     for inner_k, inner_v in outer_v.items():
                         if inner_k == "percentage_threshold":
-                            try:
-                                fv = float(inner_v)
-                            except (TypeError, ValueError):
-                                print(f"Error: {outer_k} percentage_threshold not numeric — abort")
+                            if isinstance(inner_v, bool) or not isinstance(inner_v, (int, float)) or not math.isfinite(inner_v):
+                                print(f"Error: {outer_k} percentage_threshold not finite numeric — abort")
                                 return False
+                            fv = float(inner_v)
                             if not (0 < fv <= 100):
                                 print(f"Error: {outer_k} percentage_threshold {inner_v} out of bounds (0,100] — abort")
                                 return False
                         elif inner_k == "amount_threshold":
-                            try:
-                                fv = float(inner_v)
-                            except (TypeError, ValueError):
-                                print(f"Error: {outer_k} amount_threshold not numeric — abort")
+                            if isinstance(inner_v, bool) or not isinstance(inner_v, (int, float)) or not math.isfinite(inner_v):
+                                print(f"Error: {outer_k} amount_threshold not finite numeric — abort")
                                 return False
+                            fv = float(inner_v)
                             if not (fv > 0):
                                 print(f"Error: {outer_k} amount_threshold {inner_v} must be >0 — abort")
                                 return False
                         elif inner_k == "description":
+                            if not isinstance(inner_v, str):
+                                print(f"Error: {outer_k} description must be str — abort")
+                                return False
                             continue
                         else:
                             print(f"Error: {outer_k} subkey '{inner_k}' not allowlisted — abort")
@@ -195,14 +213,22 @@ def apply_compliance_patch(patch_file: str) -> bool:
                 if not isinstance(val, list):
                     print("Error: statutory_gst_rates must be list — abort")
                     return False
+                for elem in val:
+                    if isinstance(elem, bool) or not isinstance(elem, (int, float)) or not math.isfinite(elem):
+                        print(f"Error: statutory_gst_rates element {elem!r} not finite numeric — abort")
+                        return False
             elif key == "table_12_hsn_b2b_b2c_split":
                 if not isinstance(val, dict):
                     print("Error: table_12_hsn_b2b_b2c_split must be object — abort")
                     return False
-                for sub_k in val.keys():
+                for sub_k, sub_v in val.items():
                     if sub_k not in allowed:
                         print(f"Error: table_12_hsn_b2b_b2c_split subkey '{sub_k}' not allowlisted — abort")
                         return False
+                    if sub_k == "mandatory":
+                        if not isinstance(sub_v, bool):
+                            print(f"Error: table_12_hsn_b2b_b2c_split mandatory must be bool — abort")
+                            return False
         return True
 
     # Basic allowlist + bounds for statutory patch
