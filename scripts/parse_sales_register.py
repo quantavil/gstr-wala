@@ -41,6 +41,7 @@ _IGST_ALIASES = ("igst", "iamt", "igst_amount")
 _CGST_ALIASES = ("cgst", "camt", "cgst_amount")
 _SGST_ALIASES = ("sgst", "samt", "sgst_amount")
 _CESS_ALIASES = ("cess", "csamt")
+_TAX_COL_ALIASES = _IGST_ALIASES + _CGST_ALIASES + _SGST_ALIASES
 
 
 def _pick(row_norm: Dict[str, str], aliases: tuple) -> str:
@@ -90,6 +91,13 @@ def parse_rows_sales(
     if not rows:
         raise ValueError("Sales register contains no data rows — cannot produce GSTR-1 input from an empty register.")
 
+    # Does the register actually carry IGST/CGST/SGST columns anywhere? Shared
+    # by the CSV and Excel entry points (both funnel through this function).
+    all_keys: set = set()
+    for row in rows:
+        all_keys.update(str(k).strip().lower() for k in row.keys() if k is not None)
+    tax_alias_present = any(alias in all_keys for alias in _TAX_COL_ALIASES)
+
     invoices_map: Dict[str, Dict[str, Any]] = {}
 
     for row_idx, row in enumerate(rows, start=1):
@@ -136,32 +144,38 @@ def parse_rows_sales(
             qty = None
         exp_typ = row_norm.get("exp_typ") or row_norm.get("export_type") or ("WOPAY" if pos == "97" and rt == 0 else None)
 
-        # Auto-calculate taxes ONLY when the caller explicitly opts in via
-        # derive_taxes=True. By default, missing tax data must fail loudly,
-        # never silently fabricate statutory amounts.
+        # Tax truthfulness: distinguish tax columns ABSENT from the register vs
+        # tax columns PRESENT with explicit/blank zero cells. User-provided
+        # zeros (e.g. exempt supplies whose template auto-populates the rate)
+        # are respected — never overwritten by derivation, only warned about.
+        # Derivation applies solely when the file has no tax alias columns at
+        # all, and only when the caller explicitly opts in via derive_taxes.
         supplier_state = gstin[:2]
         is_interstate = (pos != supplier_state)
         taxes_all_zero = (iamt == 0 and camt == 0 and samt == 0)
-        if (
-            not derive_taxes
-            and taxes_all_zero
-            and rt > 0
-            and txval > 0
-            and exp_typ != "WOPAY"
-        ):
-            raise ValueError(
-                f"Row {row_idx}: no tax amounts found for invoice '{inum}' with GST rate "
-                f"{rt}% and taxable value ₹{txval:,.2f}. Tried IGST columns "
-                f"({', '.join(_IGST_ALIASES)}), CGST columns ({', '.join(_CGST_ALIASES)}), "
-                f"SGST columns ({', '.join(_SGST_ALIASES)}). Refusing to fabricate tax "
-                f"amounts — pass derive_taxes=True to compute them from the rate."
-            )
-        if derive_taxes and taxes_all_zero and rt > 0 and txval > 0 and exp_typ != "WOPAY":
-            if is_interstate:
-                iamt = round((txval * rt) / 100.0, 2)
+        needs_tax_amounts = (rt > 0 and txval > 0 and exp_typ != "WOPAY")
+        if needs_tax_amounts and taxes_all_zero:
+            if not tax_alias_present and not derive_taxes:
+                raise ValueError(
+                    f"Row {row_idx}: no tax amounts found for invoice '{inum}' with GST rate "
+                    f"{rt}% and taxable value ₹{txval:,.2f}. Tried IGST columns "
+                    f"({', '.join(_IGST_ALIASES)}), CGST columns ({', '.join(_CGST_ALIASES)}), "
+                    f"SGST columns ({', '.join(_SGST_ALIASES)}). Refusing to fabricate tax "
+                    f"amounts — pass derive_taxes=True to compute them from the rate."
+                )
+            elif not tax_alias_present and derive_taxes:
+                if is_interstate:
+                    iamt = round((txval * rt) / 100.0, 2)
+                else:
+                    camt = round((txval * rt) / 200.0, 2)
+                    samt = round((txval * rt) / 200.0, 2)
             else:
-                camt = round((txval * rt) / 200.0, 2)
-                samt = round((txval * rt) / 200.0, 2)
+                print(
+                    f"Row {row_idx}: WARNING invoice '{inum}': GST rate {rt:g}% with "
+                    f"taxable value ₹{txval:,.2f} but zero tax cells "
+                    f"(igst/cgst/sgst) — booked as zero",
+                    file=sys.stderr,
+                )
 
         existing = invoices_map.get(inum)
         if existing:

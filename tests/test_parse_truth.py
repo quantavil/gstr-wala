@@ -269,6 +269,71 @@ class TestSalesRegisterTruthfulness:
         item = result["invoices"][0]["items"][0]
         assert item["camt"] == 900.0 and item["samt"] == 900.0 and item["iamt"] == 0.0
 
+
+class TestExplicitZeroTaxCellsVsAbsentColumns:
+    """Tax columns PRESENT with explicit/blank zeros are user data — respect
+    them (warn only); tax columns ABSENT is missing data — fail loudly."""
+
+    def _zero_tax_row(self, igst="", cgst="", sgst=""):
+        return ["INV-Z", "10-04-2026", GSTIN, "27", "10000", "18", igst, cgst, sgst]
+
+    def test_blank_cells_in_present_columns_parse_with_stderr_warning(self, capsys):
+        result = parse_rows_sales(_sales_rows(self._zero_tax_row()), GSTIN, FP)
+        item = result["invoices"][0]["items"][0]
+        assert item["iamt"] == 0.0 and item["camt"] == 0.0 and item["samt"] == 0.0
+        err = capsys.readouterr().err
+        assert "INV-Z" in err
+        assert "zero tax" in err.lower()
+
+    def test_explicit_zero_cells_also_warn_but_are_respected(self, capsys):
+        result = parse_rows_sales(
+            _sales_rows(self._zero_tax_row("0.00", "0.00", "0.00")), GSTIN, FP
+        )
+        item = result["invoices"][0]["items"][0]
+        assert item["iamt"] == 0.0 and item["camt"] == 0.0 and item["samt"] == 0.0
+        assert "zero tax" in capsys.readouterr().err.lower()
+
+    def test_derive_taxes_true_never_overwrites_populated_zero_cells(self):
+        result = parse_rows_sales(
+            _sales_rows(self._zero_tax_row("0.00", "0.00", "0.00")), GSTIN, FP, derive_taxes=True
+        )
+        item = result["invoices"][0]["items"][0]
+        assert item["iamt"] == 0.0 and item["camt"] == 0.0 and item["samt"] == 0.0
+
+    def test_derive_taxes_true_ignores_blanks_when_columns_present(self):
+        result = parse_rows_sales(_sales_rows(self._zero_tax_row()), GSTIN, FP, derive_taxes=True)
+        item = result["invoices"][0]["items"][0]
+        assert item["iamt"] == 0.0 and item["camt"] == 0.0 and item["samt"] == 0.0
+
+    def test_no_warning_when_taxes_nonzero_or_rate_zero_or_export(self, capsys):
+        ok_rows = [
+            ["INV-NZ", "10-04-2026", GSTIN, "27", "10000", "18", "1800", "", ""],
+            ["INV-R0", "11-04-2026", GSTIN, "27", "10000", "0", "", "", ""],
+            ["INV-WOPAY", "12-04-2026", GSTIN, "97", "10000", "0", "", "", ""],
+        ]
+        parse_rows_sales(_sales_rows(*ok_rows), GSTIN, FP)
+        assert "zero tax" not in capsys.readouterr().err.lower()
+
+    def test_absent_tax_columns_still_raise_hard(self):
+        rows = [["INV-T", "07-04-2026", GSTIN, "27", "10000", "18"]]
+        with pytest.raises(ValueError) as exc:
+            parse_rows_sales(_sales_rows(*rows), GSTIN, FP)
+        for alias in ("igst", "cgst", "sgst"):
+            assert alias in str(exc.value)
+
+    def test_excel_path_shares_the_same_logic(self, capsys):
+        # Same typed-cell shape as calamine output; exercises shared code path.
+        raw_rows = [{
+            "invoice_number": "INV-XL", "invoice_date": datetime.datetime(2026, 4, 10),
+            "customer_gstin": GSTIN, "pos": "27",
+            "taxable_value": 10000.0, "gst_rate": 18.0,
+            "igst": None, "cgst": None, "sgst": None,
+        }]
+        result = parse_rows_sales(raw_rows, GSTIN, FP)
+        item = result["invoices"][0]["items"][0]
+        assert item["camt"] == 0.0 and item["samt"] == 0.0
+        assert "zero tax" in capsys.readouterr().err.lower()
+
     def test_explicit_tax_columns_parse_without_flag(self):
         rows = _sales_rows(["INV-OK", "08-04-2026", "29AAAAA0000A1ZY", "29", "10000", "18", "1800", "", ""])
         result = parse_rows_sales(rows, GSTIN, FP)
