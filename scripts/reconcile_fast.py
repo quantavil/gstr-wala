@@ -31,12 +31,16 @@ def read_excel_calamine(filepath: str, sheet_index: int = 0) -> List[Dict[str, A
         return []
 
     headers = [str(h).strip().lower() for h in rows[0]]
+    from scripts.utils import excel_cell_to_str
+
     records = []
     for row in rows[1:]:
         record = {}
         for col_idx, val in enumerate(row):
             if col_idx < len(headers) and headers[col_idx]:
-                record[headers[col_idx]] = val
+                # excel_cell_to_str: 1001.0 -> "1001" (kills ".0"-poisoned
+                # invoice numbers), datetimes -> DD-MM-YYYY, None -> "".
+                record[headers[col_idx]] = excel_cell_to_str(val)
         records.append(record)
 
     return records

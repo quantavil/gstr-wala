@@ -14,6 +14,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 from typing import Any, Dict, List
 from scripts.reconcile_gstr2b import flatten_gstr2b, format_table
+from scripts.utils import safe_float
 
 
 
@@ -31,11 +32,13 @@ def main():
 
     records = flatten_gstr2b(data)
 
-    tot_txval = sum(r["txval"] for r in records)
-    tot_iamt = sum(r["iamt"] for r in records)
-    tot_camt = sum(r["camt"] for r in records)
-    tot_samt = sum(r["samt"] for r in records)
-    tot_csamt = sum(r["csamt"] for r in records)
+    # safe_float keeps the summary robust to null / comma-string amounts coming
+    # back from flatten; structure otherwise identical.
+    tot_txval = sum(safe_float(r.get("txval")) for r in records)
+    tot_iamt = sum(safe_float(r.get("iamt")) for r in records)
+    tot_camt = sum(safe_float(r.get("camt")) for r in records)
+    tot_samt = sum(safe_float(r.get("samt")) for r in records)
+    tot_csamt = sum(safe_float(r.get("csamt")) for r in records)
 
     print("=" * 70)
     print(f" GSTR-2B SUMMARY: {data.get('gstin', '')} (Period: {data.get('fp', '')})")

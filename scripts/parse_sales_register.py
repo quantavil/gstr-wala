@@ -6,6 +6,15 @@ Handles standard accounting columns:
   - Taxable Value, GST Rate, IGST, CGST, SGST, Cess, Total Invoice Value,
   - HSN/SAC Code, Description, Unit Quantity Code (UQC), Quantity, Export Type.
 
+Truthfulness contract:
+  - Missing required fields (invoice number, invoice date) raise ValueError —
+    no fabricated dates or coalesced placeholders.
+  - Money fields are parsed truthfully (accounting negatives, currency symbols,
+    Indian grouping); garbage raises instead of becoming a plausible number.
+  - Taxes are NEVER derived from rate unless `derive_taxes=True` is explicitly
+    passed; otherwise a missing tax column set is a loud error.
+  - Optional fields absent from the source stay empty/None — never invented.
+
 Usage:
   python3 scripts/parse_sales_register.py <sales_register.csv|xlsx|json> <gstin> <fp> [output.json]
 """
@@ -13,62 +22,158 @@ Usage:
 import csv
 import json
 import os
-import re
 import sys
 
 # Ensure root directory is on sys.path for standalone script invocation
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from typing import Any, Dict, List, Optional
+from scripts.utils import excel_cell_to_str, normalize_date_str, safe_float_strict
 from scripts.validate_gst_input import compute_gstin_checksum, is_valid_gstin
 
+_INUM_ALIASES = ("invoice_number", "inv_num", "inum", "invoice no", "invoice_no")
+_DATE_ALIASES = ("invoice_date", "date", "idt")
+_CTIN_ALIASES = ("customer_gstin", "gstin", "ctin")
+_POS_ALIASES = ("pos", "place_of_supply", "state_code")
+_TXVAL_ALIASES = ("taxable_value", "txval", "taxable_amount")
+_RATE_ALIASES = ("gst_rate", "rate", "rt")
+_IGST_ALIASES = ("igst", "iamt", "igst_amount")
+_CGST_ALIASES = ("cgst", "camt", "cgst_amount")
+_SGST_ALIASES = ("sgst", "samt", "sgst_amount")
+_CESS_ALIASES = ("cess", "csamt")
 
-def parse_rows_sales(rows: List[Dict[str, Any]], gstin: str, fp: str) -> Dict[str, Any]:
+
+def _pick(row_norm: Dict[str, str], aliases: tuple) -> str:
+    """Returns the first non-blank value among aliases, else ''."""
+    for alias in aliases:
+        val = row_norm.get(alias)
+        if val:
+            return val
+    return ""
+
+
+def _money(
+    row_norm: Dict[str, str],
+    aliases: tuple,
+    row_idx: int,
+    required: bool = False,
+) -> float:
+    """Parses an optional money field truthfully.
+
+    Absent/blank cell -> 0.0 (blank means zero charge, not garbage).
+    Present-but-unparseable -> ValueError naming the row and column.
+    """
+    for alias in aliases:
+        if alias not in row_norm:
+            continue
+        raw = row_norm[alias]
+        if raw == "":
+            continue
+        try:
+            return safe_float_strict(raw)
+        except ValueError:
+            raise ValueError(
+                f"Row {row_idx}: column '{alias}' has unparseable amount {raw!r}"
+            )
+    if required:
+        raise ValueError(
+            f"Row {row_idx}: missing required taxable value "
+            f"(tried columns: {', '.join(aliases)})"
+        )
+    return 0.0
+
+
+def parse_rows_sales(
+    rows: List[Dict[str, Any]], gstin: str, fp: str, derive_taxes: bool = False
+) -> Dict[str, Any]:
     """Normalizes generic row dictionaries into canonical GSTR-1 invoices."""
+    if not rows:
+        raise ValueError("Sales register contains no data rows — cannot produce GSTR-1 input from an empty register.")
+
     invoices_map: Dict[str, Dict[str, Any]] = {}
 
     for row_idx, row in enumerate(rows, start=1):
-        row_norm = {str(k).strip().lower(): str(v).strip() for k, v in row.items() if k is not None}
+        # excel_cell_to_str: None->"", int-valued floats de-poisoned ("1001.0"->"1001"),
+        # datetimes -> canonical DD-MM-YYYY.
+        row_norm = {
+            str(k).strip().lower(): excel_cell_to_str(v)
+            for k, v in row.items()
+            if k is not None
+        }
 
-        inum = row_norm.get("invoice_number") or row_norm.get("inv_num") or row_norm.get("inum") or row_norm.get("invoice no") or row_norm.get("invoice_no") or ""
+        inum = _pick(row_norm, _INUM_ALIASES)
         if not inum or inum == "INV-UNKNOWN":
-            raise ValueError(f"Row {row_idx}: missing invoice number (invoice_number/inum) — cannot use INV-UNKNOWN coalesce")
-        idt = row_norm.get("invoice_date") or row_norm.get("date") or row_norm.get("idt") or "01-04-2026"
-        ctin = row_norm.get("customer_gstin") or row_norm.get("gstin") or row_norm.get("ctin") or ""
-        pos = row_norm.get("pos") or row_norm.get("place_of_supply") or row_norm.get("state_code") or (ctin[:2] if ctin else gstin[:2])
-        
-        if "/" in idt:
-            idt = idt.replace("/", "-")
+            raise ValueError(f"Row {row_idx}: missing invoice number (tried columns: {', '.join(_INUM_ALIASES)}) — cannot use INV-UNKNOWN coalesce")
+        date_raw = _pick(row_norm, _DATE_ALIASES)
+        if not date_raw:
+            raise ValueError(
+                f"Row {row_idx}: missing invoice date (tried columns: {', '.join(_DATE_ALIASES)}) — refusing to fabricate one"
+            )
+        idt = normalize_date_str(date_raw, context=f"Row {row_idx} column 'invoice_date'")
+        ctin = _pick(row_norm, _CTIN_ALIASES)
+        pos = _pick(row_norm, _POS_ALIASES) or (ctin[:2] if ctin else gstin[:2])
 
-        from scripts.utils import safe_float
+        txval = _money(row_norm, _TXVAL_ALIASES, row_idx, required=True)
+        rt = _money(row_norm, _RATE_ALIASES, row_idx)
+        iamt = _money(row_norm, _IGST_ALIASES, row_idx)
+        camt = _money(row_norm, _CGST_ALIASES, row_idx)
+        samt = _money(row_norm, _SGST_ALIASES, row_idx)
+        csamt = _money(row_norm, _CESS_ALIASES, row_idx)
 
-        txval = safe_float(row_norm.get("taxable_value") or row_norm.get("txval") or row_norm.get("taxable_amount") or 0.0)
-        rt = safe_float(row_norm.get("gst_rate") or row_norm.get("rate") or row_norm.get("rt") or 0.0)
-        iamt = safe_float(row_norm.get("igst") or row_norm.get("iamt") or row_norm.get("igst_amount") or 0.0)
-        camt = safe_float(row_norm.get("cgst") or row_norm.get("camt") or row_norm.get("cgst_amount") or 0.0)
-        samt = safe_float(row_norm.get("sgst") or row_norm.get("samt") or row_norm.get("sgst_amount") or 0.0)
-        csamt = safe_float(row_norm.get("cess") or row_norm.get("csamt") or 0.0)
-        
-        hsn = str(row_norm.get("hsn") or row_norm.get("hsn_code") or row_norm.get("hsn_sc") or "9999").strip()
-        desc = row_norm.get("description") or row_norm.get("item_description") or row_norm.get("desc") or "Goods / Services"
-        uqc = row_norm.get("uqc") or row_norm.get("unit") or "NOS"
-        try:
-            qty = float(row_norm.get("quantity") or row_norm.get("qty") or 1.0)
-        except Exception:
-            qty = 1.0
+        hsn = _pick(row_norm, ("hsn", "hsn_code", "hsn_sc"))
+        desc = _pick(row_norm, ("description", "item_description", "desc"))
+        uqc = _pick(row_norm, ("uqc", "unit"))
+        qty_raw = _pick(row_norm, ("quantity", "qty"))
+        qty: Optional[float]
+        if qty_raw:
+            try:
+                qty = safe_float_strict(qty_raw)
+            except ValueError:
+                raise ValueError(
+                    f"Row {row_idx}: column 'quantity' has unparseable value {qty_raw!r}"
+                )
+        else:
+            qty = None
         exp_typ = row_norm.get("exp_typ") or row_norm.get("export_type") or ("WOPAY" if pos == "97" and rt == 0 else None)
 
-        # Auto-calculate taxes ONLY if rate > 0 and no taxes given and not zero-rated export
+        # Auto-calculate taxes ONLY when the caller explicitly opts in via
+        # derive_taxes=True. By default, missing tax data must fail loudly,
+        # never silently fabricate statutory amounts.
         supplier_state = gstin[:2]
         is_interstate = (pos != supplier_state)
-        if iamt == 0 and camt == 0 and samt == 0 and rt > 0 and txval > 0 and exp_typ != "WOPAY":
+        taxes_all_zero = (iamt == 0 and camt == 0 and samt == 0)
+        if (
+            not derive_taxes
+            and taxes_all_zero
+            and rt > 0
+            and txval > 0
+            and exp_typ != "WOPAY"
+        ):
+            raise ValueError(
+                f"Row {row_idx}: no tax amounts found for invoice '{inum}' with GST rate "
+                f"{rt}% and taxable value ₹{txval:,.2f}. Tried IGST columns "
+                f"({', '.join(_IGST_ALIASES)}), CGST columns ({', '.join(_CGST_ALIASES)}), "
+                f"SGST columns ({', '.join(_SGST_ALIASES)}). Refusing to fabricate tax "
+                f"amounts — pass derive_taxes=True to compute them from the rate."
+            )
+        if derive_taxes and taxes_all_zero and rt > 0 and txval > 0 and exp_typ != "WOPAY":
             if is_interstate:
                 iamt = round((txval * rt) / 100.0, 2)
             else:
                 camt = round((txval * rt) / 200.0, 2)
                 samt = round((txval * rt) / 200.0, 2)
 
-        if inum not in invoices_map:
+        existing = invoices_map.get(inum)
+        if existing:
+            prev_ctin = existing.get("ctin", "")
+            cur_ctin = ctin.upper() if ctin else ""
+            if prev_ctin and cur_ctin and prev_ctin != cur_ctin:
+                raise ValueError(
+                    f"Row {row_idx}: invoice number '{inum}' already booked under "
+                    f"GSTIN '{prev_ctin}' but this row declares '{cur_ctin}' — conflicting "
+                    f"counterparty for the same invoice number; split or correct the register"
+                )
+        else:
             invoices_map[inum] = {
                 "inum": inum,
                 "idt": idt,
@@ -102,22 +207,22 @@ def parse_rows_sales(rows: List[Dict[str, Any]], gstin: str, fp: str) -> Dict[st
     }
 
 
-def parse_csv_sales(csv_path: str, gstin: str, fp: str) -> Dict[str, Any]:
+def parse_csv_sales(csv_path: str, gstin: str, fp: str, derive_taxes: bool = False) -> Dict[str, Any]:
     """Parses standard CSV sales register into canonical format."""
     rows = []
     with open(csv_path, "r", encoding="utf-8-sig") as f:
         reader = csv.DictReader(f)
         for r in reader:
             rows.append(r)
-    return parse_rows_sales(rows, gstin, fp)
+    return parse_rows_sales(rows, gstin, fp, derive_taxes=derive_taxes)
 
 
-def parse_excel_sales(excel_path: str, gstin: str, fp: str) -> Dict[str, Any]:
+def parse_excel_sales(excel_path: str, gstin: str, fp: str, derive_taxes: bool = False) -> Dict[str, Any]:
     """Parses Excel (.xlsx, .xls, .xlsb) sales register using fast Calamine engine."""
     from scripts.reconcile_fast import read_excel_calamine
 
     rows = read_excel_calamine(excel_path)
-    return parse_rows_sales(rows, gstin, fp)
+    return parse_rows_sales(rows, gstin, fp, derive_taxes=derive_taxes)
 
 
 def main():
@@ -134,20 +239,26 @@ def main():
         sys.exit(f"Error: File '{sales_file}' not found.")
 
     lower_file = sales_file.lower()
-    if lower_file.endswith(".csv"):
-        canonical = parse_csv_sales(sales_file, gstin, fp)
-    elif lower_file.endswith((".xlsx", ".xls", ".xlsb")):
-        canonical = parse_excel_sales(sales_file, gstin, fp)
-    elif lower_file.endswith(".json"):
-        with open(sales_file, "r", encoding="utf-8") as f:
-            canonical = json.load(f)
-    else:
-        sys.exit("Error: Unsupported file format. Supported: .csv, .xlsx, .xls, .xlsb, .json")
+    try:
+        if lower_file.endswith(".csv"):
+            canonical = parse_csv_sales(sales_file, gstin, fp)
+        elif lower_file.endswith((".xlsx", ".xls", ".xlsb")):
+            canonical = parse_excel_sales(sales_file, gstin, fp)
+        elif lower_file.endswith(".json"):
+            with open(sales_file, "r", encoding="utf-8") as f:
+                canonical = json.load(f)
+        else:
+            sys.exit("Error: Unsupported file format. Supported: .csv, .xlsx, .xls, .xlsb, .json")
+    except ValueError as exc:
+        sys.exit(f"Error: {exc}")
+
+    if not isinstance(canonical, dict) or not canonical.get("invoices"):
+        raise ValueError(f"'{sales_file}' contains no data rows — nothing to file.")
 
     with open(out_file, "w", encoding="utf-8") as f:
         json.dump(canonical, f, indent=2)
 
-    print(f"SUCCESS: Parsed {len(canonical.get('invoices', []))} invoice(s) -> '{out_file}'")
+    print(f"SUCCESS: Parsed {len(canonical.get('invoices'))} invoice(s) -> '{out_file}'")
 
 
 if __name__ == "__main__":
