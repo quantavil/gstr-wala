@@ -42,65 +42,79 @@ def convert_multipage_pdf(
     force_image: bool = False
 ) -> Dict[str, Any]:
     """Splits and renders every page of a multi-page PDF into dedicated image files with smart strategy detection."""
+    # DPI cap 72-300 for reliability
+    if dpi < 72:
+        dpi = 72
+    if dpi > 300:
+        dpi = 300
     doc_raw_name = os.path.splitext(os.path.basename(pdf_path))[0]
     doc_slug = sanitize_filename(doc_raw_name)
     doc_output_dir = os.path.join(base_output_dir, doc_slug)
     os.makedirs(doc_output_dir, exist_ok=True)
 
     doc = pymupdf.open(pdf_path)
-    num_pages = len(doc)
-    rendered_pages = []
-
-    # Render every single page: Page 1, Page 2, ... Page N
-    for page_idx in range(num_pages):
-        page_num = page_idx + 1
-        page = doc[page_idx]
-
-        # Render page to high-res bitmap
-        pix = page.get_pixmap(dpi=dpi)
-        img_filename = f"page_{page_num:03d}.png"
-        img_path = os.path.join(doc_output_dir, img_filename)
-        pix.save(img_path)
-
-        # Digital text extraction and embedded images inspection
-        text_content = ""
-        if extract_text:
-            try:
-                text_content = page.get_text("text") or ""
-            except Exception:
-                text_content = ""
-
-        embedded_images = page.get_images()
-        text_clean = text_content.strip()
-        has_digital = bool(text_clean)
-
-        # Smart Strategy Auto-Routing
-        if force_image:
-            strategy = "FORCED_IMAGE_VISION"
-        elif len(text_clean) >= 50:
-            strategy = "DIGITAL_TEXT"
+    try:
+        num_pages = len(doc)
+        # Guard pages >500 skip rendering to avoid resource exhaustion
+        if num_pages > 500:
+            rendered_pages: List[Dict[str, Any]] = []
         else:
-            strategy = "MULTIMODAL_AI_VISION"
+            rendered_pages = []
+            # Render every single page: Page 1, Page 2, ... Page N
+            for page_idx in range(num_pages):
+                page_num = page_idx + 1
+                page = doc[page_idx]
 
-        rendered_pages.append({
-            "page_number": page_num,
-            "image_filename": img_filename,
-            "image_path": os.path.abspath(img_path),
-            "image_relative_path": os.path.relpath(img_path, os.path.abspath(".")),
-            "width": pix.width,
-            "height": pix.height,
-            "dpi": dpi,
-            "has_digital_text": has_digital,
-            "text_length": len(text_clean),
-            "embedded_images_count": len(embedded_images),
-            "extraction_strategy": strategy,
-            "text_snippet": text_clean[:250].strip() if text_clean else ""
-        })
+                # Render page to high-res bitmap
+                pix = page.get_pixmap(dpi=dpi)
+                img_filename = f"page_{page_num:03d}.png"
+                img_path = os.path.join(doc_output_dir, img_filename)
+                pix.save(img_path)
+
+                # Digital text extraction and embedded images inspection
+                text_content = ""
+                if extract_text:
+                    try:
+                        text_content = page.get_text("text") or ""
+                    except Exception:
+                        text_content = ""
+
+                embedded_images = page.get_images()
+                text_clean = text_content.strip()
+                has_digital = bool(text_clean)
+
+                # Smart Strategy Auto-Routing
+                if force_image:
+                    strategy = "FORCED_IMAGE_VISION"
+                elif len(text_clean) >= 50:
+                    strategy = "DIGITAL_TEXT"
+                else:
+                    strategy = "MULTIMODAL_AI_VISION"
+
+                rendered_pages.append({
+                    "page_number": page_num,
+                    "image_filename": img_filename,
+                    "image_path": os.path.abspath(img_path),
+                    "image_relative_path": os.path.relpath(img_path, os.path.abspath(".")),
+                    "width": pix.width,
+                    "height": pix.height,
+                    "dpi": dpi,
+                    "has_digital_text": has_digital,
+                    "text_length": len(text_clean),
+                    "embedded_images_count": len(embedded_images),
+                    "extraction_strategy": strategy,
+                    "text_snippet": text_clean[:250].strip() if text_clean else ""
+                })
+    finally:
+        try:
+            doc.close()
+        except Exception:
+            pass
 
     return {
         "doc_name": doc_raw_name,
         "doc_slug": doc_slug,
-        "original_pdf": os.path.abspath(pdf_path),
+        "original_pdf": os.path.relpath(os.path.abspath(pdf_path), os.path.abspath(".")),
         "total_pages": num_pages,
         "doc_output_dir": os.path.abspath(doc_output_dir),
         "pages": rendered_pages
@@ -114,6 +128,11 @@ def batch_convert_all_documents(
     force_image: bool = False
 ) -> Dict[str, Any]:
     """Scans and batch processes all single and multi-page PDFs."""
+    # DPI cap 72-300 for reliability
+    if dpi < 72:
+        dpi = 72
+    if dpi > 300:
+        dpi = 300
     pdf_files = []
     if os.path.isdir(input_path):
         for root, _, files in os.walk(input_path):
@@ -128,12 +147,23 @@ def batch_convert_all_documents(
 
     for pdf_f in sorted(pdf_files):
         try:
+            # Guard filesize >50MB skip
+            try:
+                if os.path.getsize(pdf_f) > 50 * 1024 * 1024:
+                    print(f"Skipping '{pdf_f}': filesize exceeds 50MB limit")
+                    continue
+            except OSError:
+                pass
             doc_result = convert_multipage_pdf(
                 pdf_f,
                 base_output_dir=output_dir,
                 dpi=dpi,
                 force_image=force_image
             )
+            # Guard pages >500 skip
+            if doc_result.get("total_pages", 0) > 500:
+                print(f"Skipping '{pdf_f}': pages exceeds 500 limit")
+                continue
             documents.append(doc_result)
             total_images_count += doc_result["total_pages"]
         except Exception as e:
@@ -144,7 +174,7 @@ def batch_convert_all_documents(
         "total_rendered_page_images": total_images_count,
         "dpi": dpi,
         "force_image_mode": force_image,
-        "base_output_dir": os.path.abspath(output_dir),
+        "base_output_dir": os.path.relpath(os.path.abspath(output_dir), os.path.abspath(".")),
         "documents": documents
     }
 

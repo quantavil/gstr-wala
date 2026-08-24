@@ -64,3 +64,19 @@ def test_batch_convert_multi_document_manifest(tmp_path):
     for doc in manifest["documents"]:
         for page in doc["pages"]:
             assert page["extraction_strategy"] == "FORCED_IMAGE_VISION"
+
+
+def test_ingest_relative_paths_and_dpi_cap(tmp_path):
+    import pymupdf, json
+    doc=pymupdf.open()
+    doc.new_page()
+    pdf=tmp_path/"a.pdf"
+    doc.save(str(pdf))
+    doc.close()
+    from scripts.ingest_pdf_vision import batch_convert_all_documents
+    out=tmp_path/"out"
+    res=batch_convert_all_documents(str(pdf), output_dir=str(out), dpi=999)
+    mf=json.loads((out/"image_manifest.json").read_text())
+    assert mf["dpi"] <=300
+    assert not mf["documents"][0]["original_pdf"].startswith("/")
+    assert res["dpi"] <=300
