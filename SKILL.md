@@ -30,10 +30,12 @@ All engines live in `scripts/`, reference guides in `references/`, schemas in `s
 1. **Never do GST arithmetic yourself.** Every rupee of taxable turnover, IGST, CGST, SGST, Cess, ITC available/reversed, Rule 88A set-off, Section 50 interest, and Section 47 late fee comes directly from tested Python engines (`scripts/gst_engine.py` and `scripts/itc_optimizer.py`). You do not add, subtract, round, or estimate GST figures in LLM context.
 2. **Validation first.** Every input file must pass `scripts/validate_gst_input.py` or Pydantic validation (Exit 0) before any computation or JSON generation. Mismatched GSTIN checksums, invalid rates, or negative values are hard errors that block the pipeline.
 3. **Rule 88A & Section 49 strict set-off.** ITC credit utilization must legally exhaust IGST credit first, then optimally allocate across CGST and SGST to eliminate stranded credits. **Inward RCM liabilities (Table 3.1(d)) MUST be paid 100% in CASH** under Section 49(4).
-4. **GSTR-2B invoice-level reconciliation before GSTR-3B claim.** Never claim unverified lump-sum purchase ITC. Table 4 ITC must be derived from `scripts/reconcile_2b.py` with invoice-level matching, Section 17(5) blocked credit permanent reversals in Table 4(B)(1), and Rule 37 reversals in Table 4(B)(2).
+4. **GSTR-2B invoice-level reconciliation before GSTR-3B claim.** Never claim unverified lump-sum purchase ITC. Table 4 ITC must be derived from `scripts/reconcile_gstr2b.py` with invoice-level matching, Section 17(5) blocked credit permanent reversals in Table 4(B)(1), and Rule 37 reversals in Table 4(B)(2).
+
 5. **Credentials are untouchable.** Never ask for, read, store, or type the user's GST portal password, OTPs, or bank logins. The user performs all portal logins themselves.
 6. **The user performs the final acts: Pay, Submit, e-Verify.** You generate the exact offline JSON files and CA-grade filing packs; the user uploads the JSON, creates/pays the PMT-06 Challan, clicks Submit, and verifies with EVC OTP or DSC.
-7. **Privacy first.** Raw financial records stay local. Python scripts run entirely on the local machine with zero external network or telemetry dependencies.
+7. **Zero Outbound Data Transmission (Inbound Web Access Allowed).** User financial records, invoices, turnover, GSTINs, and purchase registers MUST NEVER be transmitted, exported, or leaked to external servers or telemetry. Inbound internet access is fully permitted to query public information (statutory rules, CBIC notifications, GST portal updates, tax rates, HSN codes, and documentation).
+
 
 ---
 
@@ -70,7 +72,8 @@ Create the standard session directory in the current working folder:
 gstr-wala-workspace/
   docs/        # User drops sales registers, purchase registers, GSTR-2B JSON, PDF bills
   work/        # gstr1_input.json, purchase_register.json, images/, progress.md
-  output/      # GSTR1_portal.json, GSTR3B_portal.json, gstr3b_statement.pdf, filing packs
+  output/      # gstr1_portal.json, gstr3b_portal.json, gstr1_filing_pack.md, gstr3b_filing_pack.md, gstr3b_statement.pdf
+
   .gitignore   # Blocks tax documents from ever being committed
 ```
 Copy `workspace_template/.gitignore` and `workspace_template/work/progress.md` into `gstr-wala-workspace/`.
@@ -83,8 +86,10 @@ Ask the user to drop their records into `docs/`:
 4. **Scanned PDF Invoices / Paper Bills:**
    - If the user provides multi-page PDF bills or paper receipts, batch convert them into structured page-by-page images:
      ```bash
-     uv run python3 scripts/cli.py pdf-to-images-cmd docs/ work/images/ --dpi 200
+     uv run python3 scripts/cli.py ingest-pdf docs/ work/images/ --dpi 200
      ```
+
+
    - Inspect generated page images in `work/images/<doc_name>/page_001.png` using visual tools.
 
 ### Step 3: Extract & Validate GSTR-1 Sales
@@ -108,10 +113,12 @@ Ask the user to drop their records into `docs/`:
 - Run 2-way fuzzy reconciliation against GSTR-2B:
   ```bash
   # Standard Reconciler
-  python3 scripts/reconcile_2b.py work/purchase_register.json docs/gstr2b.json --json > work/reconciliation.json
+  python3 scripts/reconcile_gstr2b.py work/purchase_register.json docs/gstr2b.json --json > work/reconciliation.json
 
   # High-Volume (100k+ Invoices) Fast Vectorized Engine
-  uv run python3 scripts/cli.py reconcile-cmd work/purchase_register.json docs/gstr2b.json --fast
+  uv run python3 scripts/cli.py reconcile work/purchase_register.json docs/gstr2b.json --fast
+
+
   ```
 - Review the reconciliation summary with the user:
   - `EXACT_MATCH` & `TOLERANCE_MATCH` $\to$ Eligible for Table 4(A)(5)
@@ -126,15 +133,17 @@ Ask the user to drop their records into `docs/`:
   ```
 - Generate official GST Portal GSTR-1 offline JSON:
   ```bash
-  python3 scripts/generate_gstr1_json.py work/gstr1_input.json output/GSTR1_portal.json
+  python3 scripts/generate_gstr1_json.py work/gstr1_input.json output/gstr1_portal.json
   ```
-- Generate `output/gstr1-filing-pack.md` containing line-by-line summary of Tables 4 (B2B), 5 (B2CL > ₹1L per Notif 12/2024-CT), 6 (Exports & SEZ), 7 (B2CS), 8 (Nil/Exempt/Non-GST nested schema), 12 (HSN 12A/12B), and 13 (Docs).
+- Generate `output/gstr1_filing_pack.md` containing line-by-line summary of Tables 4 (B2B), 5 (B2CL > ₹1L per Notif 12/2024-CT), 6 (Exports & SEZ), 7 (B2CS), 8 (Nil/Exempt/Non-GST nested schema), 12 (HSN 12A/12B), and 13 (Docs).
+
 
 ### Step 6: Auto-Populate GSTR-3B & DRC-01B/C Risk Check
 - Bridge GSTR-1 outward turnover and GSTR-2B ITC into GSTR-3B input:
   ```bash
-  python3 scripts/gstr1_to_3b_bridge.py work/gstr1_input.json work/reconciliation.json work/gstr3b_input.json
+  python3 scripts/bridge_gstr1_to_gstr3b.py work/gstr1_input.json work/reconciliation.json work/gstr3b_input.json
   ```
+
   - Routes SEZ supplies to Table 3.1(b) Zero-Rated.
   - Wires inward RCM liability from reconciliation to Table 3.1(d) (Outward liability payable 100% in cash) and Table 4(A)(3) (Eligible Inward RCM ITC).
 - The bridge automatically executes the **Pre-Emptive DRC-01B / DRC-01C Radar** to guarantee outward liabilities and ITC claims are within safe departmental thresholds.
@@ -152,12 +161,13 @@ Ask the user to drop their records into `docs/`:
 ### Step 8: Generate GSTR-3B Portal JSON & CA Filing Pack / PDF
 - Generate official GST Portal GSTR-3B offline JSON:
   ```bash
-  python3 scripts/generate_gstr3b_json.py work/gstr3b_input.json output/GSTR3B_portal.json
+  python3 scripts/generate_gstr3b_json.py work/gstr3b_input.json output/gstr3b_portal.json
   ```
 - Generate certified CA Statements & PDF:
   ```bash
-  uv run python3 scripts/generate_pdf_report.py work/gstr3b_input.json output/gstr3b_statement.pdf
+  uv run python3 scripts/generate_pdf_statement.py work/gstr3b_input.json output/gstr3b_statement.pdf
   ```
+
 - Or run the complete automated pipeline in a single step:
   ```bash
   uv run python3 scripts/cli.py pipeline \
@@ -170,9 +180,10 @@ Ask the user to drop their records into `docs/`:
 ### Step 9: Portal Filing Walkthrough
 Guide the user step-by-step through filing on `www.gst.gov.in` using `references/portal-walkthrough.md`:
 1. **File GSTR-1 First:**
-   - Upload `output/GSTR1_portal.json` under **Returns > GSTR-1 > Prepare Offline**.
-   - Verify summary online against `output/gstr1-filing-pack.md`.
+   - Upload `output/gstr1_portal.json` under **Returns > GSTR-1 > Prepare Offline**.
+   - Verify summary online against `output/gstr1_filing_pack.md`.
    - Submit and e-verify with EVC OTP. Record GSTR-1 ARN.
+
 2. **File GSTR-3B Second:**
    - Verify auto-drafted Table 3.1 and Table 4 values.
    - Deposit Challan PMT-06 if cash shortfall exists.
@@ -190,13 +201,15 @@ Guide the user step-by-step through filing on `www.gst.gov.in` using `references
 Whenever a new CBIC notification or GST Council advisory is issued:
 1. **Live Discovery:**
    ```bash
-   uv run python3 scripts/fetch_live_compliance.py
+   uv run python3 scripts/discover_statutory_rules.py
    ```
+
 2. **Apply & Verify Patch:**
    ```bash
    python3 scripts/compliance_radar.py --apply patch.json
    ```
-   The engine stages the threshold changes in `config/rules_manifest.json`, runs all 39 test suites and invariant fuzzers, and commits the update only if 100% pass (with automatic rollback on failure).
+   The engine stages the threshold changes in `config/rules_manifest.json`, runs all 49 test suites and invariant fuzzers, and commits the update only if 100% pass (with automatic rollback on failure).
+
 
 ---
 
@@ -225,6 +238,8 @@ Whenever a new CBIC notification or GST Council advisory is issued:
 | [`references/interest-and-late-fees.md`](file:///home/quantavil/Documents/Project/gstr-wala/references/interest-and-late-fees.md) | Computing Section 50 net cash interest or Section 47 late fee caps |
 | [`references/drc-mismatch-audit-guide.md`](file:///home/quantavil/Documents/Project/gstr-wala/references/drc-mismatch-audit-guide.md) | Evaluating DRC-01B (Rule 88C) and DRC-01C (Rule 88D) mismatch risks |
 | [`references/portal-walkthrough.md`](file:///home/quantavil/Documents/Project/gstr-wala/references/portal-walkthrough.md) | Guiding the user through upload, payment, and EVC filing on gst.gov.in |
+| [`references/file-naming-standard.md`](file:///home/quantavil/Documents/Project/gstr-wala/references/file-naming-standard.md) | Reference for repository file naming conventions across code, tests, and outputs |
+
 
 ---
 

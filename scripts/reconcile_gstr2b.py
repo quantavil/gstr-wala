@@ -27,28 +27,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 from typing import Any, Dict, List, Optional, Set, Tuple
 
-
-def round_cur(val: float) -> float:
-    return round(float(val) + 1e-9, 2)
-
-
-def normalize_inum(inum: str) -> str:
-    """Normalizes invoice numbers for robust fuzzy matching."""
-    if not inum:
-        return ""
-    cleaned = re.sub(r"[^A-Za-z0-9]", "", str(inum)).upper()
-    # Strip leading zeroes at start or after alphabetic prefix
-    normalized = re.sub(r"(^|[A-Z]+)0+(\d+)", r"\1\2", cleaned)
-    return normalized
-
-
-def extract_trailing_digits(s: str) -> str:
-    """Extracts trailing digits stripped of leading zeroes."""
-    m = re.search(r"(\d+)$", s)
-    if m:
-        digits = m.group(1).lstrip("0")
-        return digits if digits else "0"
-    return s
+from scripts.utils import round_cur, normalize_inum_cached as normalize_inum, extract_trailing_digits_cached as extract_trailing_digits
 
 
 def flatten_gstr2b(g2b_data: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -431,15 +410,15 @@ def reconcile(purchase_register: List[Dict[str, Any]], gstr2b_raw: Dict[str, Any
                 "total": round_cur(rev_temp_i + rev_temp_c + rev_temp_s + rev_temp_cs)
             },
             "table_4_c_net_itc": {
-                "iamt": round_cur(claim_i + impg_i + isd_i - rev_perm_i - rev_temp_i),
-                "camt": round_cur(claim_c + isd_c - rev_perm_c - rev_temp_c),
-                "samt": round_cur(claim_s + isd_s - rev_perm_s - rev_temp_s),
-                "csamt": round_cur(claim_cs + impg_cs + isd_cs - rev_perm_cs - rev_temp_cs),
+                "iamt": round_cur(claim_i + impg_i + rcm_i + isd_i - rev_perm_i - rev_temp_i),
+                "camt": round_cur(claim_c + rcm_c + isd_c - rev_perm_c - rev_temp_c),
+                "samt": round_cur(claim_s + rcm_s + isd_s - rev_perm_s - rev_temp_s),
+                "csamt": round_cur(claim_cs + impg_cs + rcm_cs + isd_cs - rev_perm_cs - rev_temp_cs),
                 "total": round_cur(
-                    (claim_i + impg_i + isd_i - rev_perm_i - rev_temp_i) +
-                    (claim_c + isd_c - rev_perm_c - rev_temp_c) +
-                    (claim_s + isd_s - rev_perm_s - rev_temp_s) +
-                    (claim_cs + impg_cs + isd_cs - rev_perm_cs - rev_temp_cs)
+                    (claim_i + impg_i + rcm_i + isd_i - rev_perm_i - rev_temp_i) +
+                    (claim_c + rcm_c + isd_c - rev_perm_c - rev_temp_c) +
+                    (claim_s + rcm_s + isd_s - rev_perm_s - rev_temp_s) +
+                    (claim_cs + impg_cs + rcm_cs + isd_cs - rev_perm_cs - rev_temp_cs)
                 )
             },
             "table_4_d_2_ineligible_16_4": {
@@ -465,17 +444,9 @@ def reconcile(purchase_register: List[Dict[str, Any]], gstr2b_raw: Dict[str, Any
 
 
 def format_table(headers: List[str], rows: List[List[Any]]) -> str:
-    col_widths = [len(h) for h in headers]
-    for row in rows:
-        for i, val in enumerate(row):
-            col_widths[i] = max(col_widths[i], len(str(val)))
+    from scripts.utils import format_table as _ft
 
-    header_line = "| " + " | ".join(h.ljust(col_widths[i]) for i, h in enumerate(headers)) + " |"
-    sep_line = "|-" + "-|-".join("-" * col_widths[i] for i in range(len(headers))) + "-|"
-    data_lines = []
-    for row in rows:
-        data_lines.append("| " + " | ".join(str(val).rjust(col_widths[i]) if isinstance(val, (int, float)) else str(val).ljust(col_widths[i]) for i, val in enumerate(row)) + " |")
-    return "\n".join([header_line, sep_line] + data_lines)
+    return _ft(headers, rows)
 
 
 def main():

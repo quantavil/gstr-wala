@@ -13,7 +13,8 @@ import sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from typing import Any, Dict, List
-from scripts.reconcile_2b import flatten_gstr2b, format_table
+from scripts.reconcile_gstr2b import flatten_gstr2b, format_table
+
 
 
 def main():

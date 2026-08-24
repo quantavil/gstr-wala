@@ -208,9 +208,10 @@ def main():
     with open(recon_file, "r", encoding="utf-8") as f:
         recon_data = json.load(f)
 
-    generate_gstr1_filing_pack(g1_data, os.path.join(out_dir, "gstr1-filing-pack.md"))
-    generate_gstr3b_filing_pack(g3b_data, os.path.join(out_dir, "gstr3b-filing-pack.md"))
-    generate_reconciliation_report(recon_data, os.path.join(out_dir, "reconciliation-report.md"))
+    generate_gstr1_filing_pack(g1_data, os.path.join(out_dir, "gstr1_filing_pack.md"))
+    generate_gstr3b_filing_pack(g3b_data, os.path.join(out_dir, "gstr3b_filing_pack.md"))
+    generate_reconciliation_report(recon_data, os.path.join(out_dir, "reconciliation_report.md"))
+
 
     print(f"SUCCESS: Generated all CA Filing Packs in directory -> '{out_dir}/'")
 

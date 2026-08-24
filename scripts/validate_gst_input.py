@@ -134,10 +134,17 @@ def validate_gstr1_input(data: Dict[str, Any]) -> ValidationResult:
             seen_invoice_numbers.add(inum)
             prefix = f"Invoice '{inum}'"
 
-        # Date validation
+        # Date validation — regex + calendar check (reject 31-02-2026 etc.)
         idt = inv.get("idt")
         if not idt or not isinstance(idt, str) or not DATE_REGEX.match(idt):
             result.error(f"{prefix}: Invalid 'idt' date '{idt}'. Expected DD-MM-YYYY format.")
+        else:
+            try:
+                from datetime import datetime
+
+                datetime.strptime(idt, "%d-%m-%Y")
+            except ValueError:
+                result.error(f"{prefix}: Invalid calendar date '{idt}'")
 
         # POS validation
         pos = inv.get("pos")
@@ -163,15 +170,26 @@ def validate_gstr1_input(data: Dict[str, Any]) -> ValidationResult:
 
         for item_idx, itm in enumerate(items):
             item_pfx = f"{prefix} Item #{item_idx + 1}"
-            txval = itm.get("txval", 0.0)
-            rt = itm.get("rt", 0.0)
-            iamt = itm.get("iamt", 0.0)
-            camt = itm.get("camt", 0.0)
-            samt = itm.get("samt", 0.0)
-            csamt = itm.get("csamt", 0.0)
+            import math
+            from scripts.utils import safe_float as _sf
+
+            txval = _sf(itm.get("txval", 0.0), default=float("nan"))
+            rt = _sf(itm.get("rt", 0.0), default=float("nan"))
+            iamt = _sf(itm.get("iamt", 0.0), default=float("nan"))
+            camt = _sf(itm.get("camt", 0.0), default=float("nan"))
+            samt = _sf(itm.get("samt", 0.0), default=float("nan"))
+            csamt = _sf(itm.get("csamt", 0.0), default=float("nan"))
+
+            # finite check
+            for field_name, val in [("txval", txval), ("rt", rt), ("iamt", iamt), ("camt", camt), ("samt", samt), ("csamt", csamt)]:
+                if not isinstance(val, (int, float)) or not math.isfinite(val):
+                    result.error(f"{item_pfx}: '{field_name}' is not a finite number ({val})")
+                    continue
 
             if txval < 0:
                 result.error(f"{item_pfx}: 'txval' cannot be negative ({txval})")
+            if iamt < 0 or camt < 0 or samt < 0 or csamt < 0:
+                result.error(f"{item_pfx}: tax amounts cannot be negative (iamt={iamt}, camt={camt}, samt={samt}, csamt={csamt})")
             if float(rt) not in VALID_RATES:
                 result.error(f"{item_pfx}: Invalid GST rate '{rt}%'. Allowed rates: {sorted(list(VALID_RATES))}")
 
@@ -179,24 +197,28 @@ def validate_gstr1_input(data: Dict[str, Any]) -> ValidationResult:
             if is_interstate:
                 if camt > 0 or samt > 0:
                     result.error(f"{item_pfx}: Inter-state supply (Supplier {supplier_state} != POS {pos}) cannot have CGST ({camt}) or SGST ({samt}). Must charge IGST.")
-                expected_iamt = round((txval * rt) / 100.0, 2)
+                from scripts.utils import round_cur as _rc
+
+                expected_iamt = _rc((txval * rt) / 100.0)
                 if abs(expected_iamt - iamt) > 1.0:
                     result.warn(f"{item_pfx}: IGST ₹{iamt} deviates from calculated ₹{expected_iamt} (txval ₹{txval} @ {rt}%)")
             else:
                 if iamt > 0:
                     result.error(f"{item_pfx}: Intra-state supply (Supplier {supplier_state} == POS {pos}) cannot have IGST ({iamt}). Must charge CGST + SGST.")
-                expected_half = round((txval * rt) / 200.0, 2)
+                from scripts.utils import round_cur as _rc2
+
+                expected_half = _rc2((txval * rt) / 200.0)
                 if abs(expected_half - camt) > 1.0:
                     result.warn(f"{item_pfx}: CGST ₹{camt} deviates from calculated ₹{expected_half} (txval ₹{txval} @ {rt}/2%)")
                 if abs(expected_half - samt) > 1.0:
                     result.warn(f"{item_pfx}: SGST ₹{samt} deviates from calculated ₹{expected_half} (txval ₹{txval} @ {rt}/2%)")
 
-            # HSN code check
+            # HSN code check — error (portal rejects)
             hsn = itm.get("hsn_sc")
             if hsn:
                 hsn_str = str(hsn).strip()
                 if not (len(hsn_str) in [4, 6, 8] and hsn_str.isdigit()):
-                    result.warn(f"{item_pfx}: HSN/SAC '{hsn_str}' should be 4, 6, or 8 digits")
+                    result.error(f"{item_pfx}: HSN/SAC '{hsn_str}' must be 4, 6, or 8 digits")
 
             calc_inv_val += (txval + iamt + camt + samt + csamt)
 
@@ -236,11 +258,18 @@ def validate_gstr3b_input(data: Dict[str, Any]) -> ValidationResult:
     elif not isinstance(data["ret_period"], str) or not PERIOD_REGEX.match(data["ret_period"]):
         result.error(f"Invalid 'ret_period' format: '{data.get('ret_period')}'. Expected MMYYYY.")
 
-    # Dates
+    # Dates — calendar validation extra
     for dt_field in ["due_date", "filing_date"]:
         if dt_field in data and data[dt_field]:
             if not DATE_REGEX.match(data[dt_field]):
                 result.error(f"Invalid '{dt_field}' date '{data[dt_field]}'. Expected DD-MM-YYYY.")
+            else:
+                try:
+                    from datetime import datetime
+
+                    datetime.strptime(data[dt_field], "%d-%m-%Y")
+                except ValueError:
+                    result.error(f"Invalid calendar date for '{dt_field}': '{data[dt_field]}'")
 
     # Outward liability checks
     outward = data.get("outward_supplies", {})
@@ -293,13 +322,27 @@ def validate_file(file_path: str) -> ValidationResult:
         res.error(f"Root element must be a JSON object in '{file_path}'")
         return res
 
-    # Check for accidental credential leaks
-    str_data = json.dumps(data).lower()
-    for forbidden in ["password", "otp", "auth_token", "sek", "app_key"]:
-        if f'"{forbidden}"' in str_data:
-            res = ValidationResult()
-            res.error(f"Security Alert: Sensitive field '{forbidden}' detected in input. Remove credentials before validation.")
-            return res
+    # Check for accidental credential leaks — recursive key scan
+    def _collect_keys(obj, out):
+        if isinstance(obj, dict):
+            for k, v in obj.items():
+                out.append(str(k))
+                _collect_keys(v, out)
+        elif isinstance(obj, list):
+            for it in obj:
+                _collect_keys(it, out)
+
+    _keys: list[str] = []
+    _collect_keys(data, _keys)
+
+    _keys_lower = [k.lower() for k in _keys]
+    blocked_substrings = ["password", "passwd", "pwd", "secret", "sek", "otp", "auth_token", "app_key", "token", "api_key", "private_key"]
+    for k in _keys_lower:
+        for blk in blocked_substrings:
+            if blk in k:
+                res = ValidationResult()
+                res.error(f"Security Alert: Sensitive field '{k}' contains blocked substring '{blk}'. Remove credentials before validation.")
+                return res
 
     if "invoices" in data or "fp" in data:
         return validate_gstr1_input(data)

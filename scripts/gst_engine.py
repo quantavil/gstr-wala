@@ -25,19 +25,14 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 from scripts.constants import B2CL_THRESHOLD
 from scripts.models import StatutoryInterestResult, StatutoryLateFeeResult
+from scripts.utils import round_cur as _utils_round_cur, safe_float as _utils_safe_float
 
 if sys.version_info < (3, 12):
     sys.exit("gstr-wala requires Python 3.12+")
 
 
 def safe_float(val: Any, default: float = 0.0) -> float:
-    """Defensively converts values to float, handling strings and nulls safely."""
-    if val is None:
-        return default
-    try:
-        return float(val)
-    except (ValueError, TypeError):
-        return default
+    return _utils_safe_float(val, default)
 
 
 def parse_date(dt_str: Optional[str]) -> Optional[datetime]:
@@ -50,14 +45,7 @@ def parse_date(dt_str: Optional[str]) -> Optional[datetime]:
 
 
 def round_cur(val: Any) -> float:
-    """Rounds currency to 2 decimal places using exact Decimal ROUND_HALF_UP."""
-    if val is None:
-        return 0.0
-    try:
-        d = Decimal(str(val))
-        return float(d.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
-    except Exception:
-        return 0.0
+    return _utils_round_cur(val)
 
 
 def compute_gstr1_tables(data: Dict[str, Any]) -> Dict[str, Any]:
@@ -94,6 +82,9 @@ def compute_gstr1_tables(data: Dict[str, Any]) -> Dict[str, Any]:
                 pos = supplier_state
             else:
                 raise ValueError(f"Invoice '{inum}' is missing required Place of Supply ('pos')")
+        # Persist inferred POS back to invoice for downstream portal serializer
+        inv["pos"] = str(pos).zfill(2)
+        pos = inv["pos"]
 
         rchrg = inv.get("rchrg", "N")
         inv_typ = inv.get("inv_typ", "R")
@@ -159,11 +150,11 @@ def compute_gstr1_tables(data: Dict[str, Any]) -> Dict[str, Any]:
                     b2cs_key = (pos, rt, etin)
                     if b2cs_key not in b2cs_groups:
                         b2cs_groups[b2cs_key] = {"txval": 0.0, "iamt": 0.0, "camt": 0.0, "samt": 0.0, "csamt": 0.0}
-                    b2cs_groups[b2cs_key]["txval"] += float(itm.get("txval", 0.0))
-                    b2cs_groups[b2cs_key]["iamt"] += float(itm.get("iamt", 0.0))
-                    b2cs_groups[b2cs_key]["camt"] += float(itm.get("camt", 0.0))
-                    b2cs_groups[b2cs_key]["samt"] += float(itm.get("samt", 0.0))
-                    b2cs_groups[b2cs_key]["csamt"] += float(itm.get("csamt", 0.0))
+                    b2cs_groups[b2cs_key]["txval"] += safe_float(itm.get("txval", 0.0))
+                    b2cs_groups[b2cs_key]["iamt"] += safe_float(itm.get("iamt", 0.0))
+                    b2cs_groups[b2cs_key]["camt"] += safe_float(itm.get("camt", 0.0))
+                    b2cs_groups[b2cs_key]["samt"] += safe_float(itm.get("samt", 0.0))
+                    b2cs_groups[b2cs_key]["csamt"] += safe_float(itm.get("csamt", 0.0))
 
     # Format Table 7 (B2CS list)
     table_7_b2cs = []
@@ -362,18 +353,9 @@ def compute(data: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def format_table(headers: List[str], rows: List[List[Any]]) -> str:
-    """Formats an ASCII markdown table."""
-    col_widths = [len(h) for h in headers]
-    for row in rows:
-        for i, val in enumerate(row):
-            col_widths[i] = max(col_widths[i], len(str(val)))
+    from scripts.utils import format_table as _ft
 
-    header_line = "| " + " | ".join(h.ljust(col_widths[i]) for i, h in enumerate(headers)) + " |"
-    sep_line = "|-" + "-|-".join("-" * col_widths[i] for i in range(len(headers))) + "-|"
-    data_lines = []
-    for row in rows:
-        data_lines.append("| " + " | ".join(str(val).rjust(col_widths[i]) if isinstance(val, (int, float)) else str(val).ljust(col_widths[i]) for i, val in enumerate(row)) + " |")
-    return "\n".join([header_line, sep_line] + data_lines)
+    return _ft(headers, rows)
 
 
 def main():

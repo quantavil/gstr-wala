@@ -5,8 +5,9 @@ import os
 import pytest
 from scripts.generate_gstr1_json import generate_portal_gstr1
 from scripts.generate_gstr3b_json import generate_portal_gstr3b
-from scripts.reconcile_2b import reconcile, flatten_gstr2b
-from scripts.gstr1_to_3b_bridge import bridge_gstr1_and_2b_to_3b
+from scripts.reconcile_gstr2b import reconcile, flatten_gstr2b
+from scripts.bridge_gstr1_to_gstr3b import bridge_gstr1_and_2b_to_3b
+
 
 
 FIXTURES_DIR = os.path.join(os.path.dirname(__file__), "fixtures")

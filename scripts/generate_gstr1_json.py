@@ -183,20 +183,25 @@ def generate_portal_gstr1(input_data: Dict[str, Any]) -> Dict[str, Any]:
 
     cdnr_payload = [{"ctin": ctin, "nt": notes} for ctin, notes in sorted(cdnr_by_ctin.items())]
 
-    # 5. Format Exports (Table 6A)
-    exp_payload = []
+    # 5. Format Exports (Table 6A) — group by exp_typ per portal spec
+    from collections import defaultdict
+
+    exp_by_typ: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
     for exp_inv in comp["table_6_exp"]:
-        itms = []
-        for itm_idx, itm in enumerate(exp_inv.get("items", [])):
-            itms.append({
-                "txval": round_cur(itm.get("txval", 0.0)),
-                "rt": float(itm.get("rt", 0.0)),
-                "iamt": round_cur(itm.get("iamt", 0.0)),
-                "csamt": round_cur(itm.get("csamt", 0.0))
-            })
-        exp_payload.append({
-            "exp_typ": exp_inv.get("exp_typ", "WOPAY"),
-            "inv": [{
+        exp_by_typ[exp_inv.get("exp_typ", "WOPAY")].append(exp_inv)
+    exp_payload = []
+    for exp_typ, invs in sorted(exp_by_typ.items()):
+        inv_payload = []
+        for exp_inv in invs:
+            itms = []
+            for itm in exp_inv.get("items", []):
+                itms.append({
+                    "txval": round_cur(itm.get("txval", 0.0)),
+                    "rt": float(itm.get("rt", 0.0)),
+                    "iamt": round_cur(itm.get("iamt", 0.0)),
+                    "csamt": round_cur(itm.get("csamt", 0.0))
+                })
+            inv_payload.append({
                 "inum": exp_inv.get("inum"),
                 "idt": exp_inv.get("idt"),
                 "val": round_cur(exp_inv.get("val", 0.0)),
@@ -204,8 +209,8 @@ def generate_portal_gstr1(input_data: Dict[str, Any]) -> Dict[str, Any]:
                 "sbnum": exp_inv.get("sb_num", ""),
                 "sbdt": exp_inv.get("sb_dt", ""),
                 "itms": itms
-            }]
-        })
+            })
+        exp_payload.append({"exp_typ": exp_typ, "inv": inv_payload})
 
     # 6. Format HSN Summary (Table 12)
     hsn_data = []
@@ -295,7 +300,8 @@ def main():
         sys.exit(1)
 
     input_file = sys.argv[1]
-    output_file = sys.argv[2] if len(sys.argv) > 2 else "GSTR1_portal.json"
+    output_file = sys.argv[2] if len(sys.argv) > 2 else "gstr1_portal.json"
+
 
     if not os.path.exists(input_file):
         sys.exit(f"Error: File '{input_file}' not found.")

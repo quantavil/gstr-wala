@@ -21,7 +21,8 @@ from concurrent.futures import ThreadPoolExecutor
 # Ensure root directory is on sys.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from scripts.fast_engine import reconcile_polars_rapidfuzz
+from scripts.reconcile_fast import reconcile_polars_rapidfuzz
+
 from scripts.itc_optimizer import optimize_setoff
 from scripts.gst_engine import compute_gstr1_tables
 

@@ -13,10 +13,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 from typing import Any, Dict, List, Optional
 from scripts.itc_optimizer import optimize_from_input_dict
-
-
-def round_cur(val: float) -> float:
-    return round(float(val) + 1e-9, 2)
+from scripts.utils import round_cur
 
 
 def sum_tax_rows(rows: List[Dict[str, Any]], key: str) -> float:
@@ -208,8 +205,8 @@ def generate_portal_gstr3b(input_data: Dict[str, Any]) -> Dict[str, Any]:
                 "csamt": round_cur(outward.get("taxable", {}).get("csamt", 0.0) + outward.get("zero_rated", {}).get("csamt", 0.0)),
                 "paid_itc": {
                     "iamt": round_cur(m["igst_liability"]["paid_by_igst_credit"] + m["cgst_liability"]["paid_by_igst_credit"] + m["sgst_liability"]["paid_by_igst_credit"]),
-                    "camt": round_cur(m["cgst_liability"]["paid_by_cgst_credit"]),
-                    "samt": round_cur(m["sgst_liability"]["paid_by_sgst_credit"]),
+                    "camt": round_cur(m["cgst_liability"]["paid_by_cgst_credit"] + m["igst_liability"]["paid_by_cgst_credit"]),
+                    "samt": round_cur(m["sgst_liability"]["paid_by_sgst_credit"] + m["igst_liability"]["paid_by_sgst_credit"]),
                     "csamt": round_cur(m["cess_liability"]["paid_by_cess_credit"])
                 },
                 "paid_cash": {
@@ -223,9 +220,9 @@ def generate_portal_gstr3b(input_data: Dict[str, Any]) -> Dict[str, Any]:
                     "i_pd_c": round_cur(m["cgst_liability"]["paid_by_igst_credit"]),
                     "i_pd_s": round_cur(m["sgst_liability"]["paid_by_igst_credit"]),
                     "c_pd_c": round_cur(m["cgst_liability"]["paid_by_cgst_credit"]),
-                    "c_pd_i": 0.0,
+                    "c_pd_i": round_cur(m["igst_liability"]["paid_by_cgst_credit"]),
                     "s_pd_s": round_cur(m["sgst_liability"]["paid_by_sgst_credit"]),
-                    "s_pd_i": 0.0,
+                    "s_pd_i": round_cur(m["igst_liability"]["paid_by_sgst_credit"]),
                     "cs_pd_cs": round_cur(m["cess_liability"]["paid_by_cess_credit"])
                 },
                 "tx_pmt_cash": {
@@ -233,7 +230,8 @@ def generate_portal_gstr3b(input_data: Dict[str, Any]) -> Dict[str, Any]:
                     "camt": round_cur(cash.get("camt", 0.0)),
                     "samt": round_cur(cash.get("samt", 0.0)),
                     "csamt": round_cur(cash.get("csamt", 0.0))
-                }
+                },
+                "liab_ldg_id": 0
             }
         ]
     }
@@ -256,7 +254,8 @@ def main():
         sys.exit(1)
 
     in_file = sys.argv[1]
-    out_file = sys.argv[2] if len(sys.argv) > 2 else "GSTR3B_portal.json"
+    out_file = sys.argv[2] if len(sys.argv) > 2 else "gstr3b_portal.json"
+
 
     if not os.path.exists(in_file):
         sys.exit(f"Error: File '{in_file}' not found.")

@@ -20,8 +20,8 @@ STATE_CODES = {
     "37": "Andhra Pradesh", "38": "Ladakh", "97": "Other Territory"
 }
 
-# Standard GST Tax Rates
-VALID_RATES = {0.0, 0.1, 0.25, 1.5, 3.0, 5.0, 6.0, 12.0, 18.0, 28.0}
+# Standard GST Tax Rates — combined rate as per rates-and-hsn-rules.md (6% removed: not a combined slab)
+VALID_RATES = {0.0, 0.1, 0.25, 1.5, 3.0, 5.0, 12.0, 18.0, 28.0}
 
 # Regular Expression Patterns
 GSTIN_REGEX = re.compile(r"^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$")

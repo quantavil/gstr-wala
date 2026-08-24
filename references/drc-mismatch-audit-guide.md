@@ -45,5 +45,6 @@ Upon receiving a DRC-01C Part A intimation, the taxpayer must take action within
 ---
 
 ## 3. How `gstr-wala` Protects You from DRC-01B and DRC-01C
-- `gstr-wala`'s **Pre-Emptive Radar** (`gstr1_to_3b_bridge.py` & `gst_engine.py`) continuously cross-checks GSTR-1 vs GSTR-3B and GSTR-2B vs GSTR-3B before any filing pack or portal JSON is generated.
+- `gstr-wala`'s **Pre-Emptive Radar** (`bridge_gstr1_to_gstr3b.py` & `gst_engine.py`) continuously cross-checks GSTR-1 vs GSTR-3B and GSTR-2B vs GSTR-3B before any filing pack or portal JSON is generated.
+
 - Any discrepancy approaching statutory trigger limits is highlighted with clear warnings and remediation instructions.

@@ -11,10 +11,10 @@ This reference walks through the complete procedure for filing **Form GSTR-1** a
 2. **Navigate:** Go to **Services > Returns > Returns Dashboard**.
 3. **Select Period:** Select the Financial Year (e.g. `2026-27`) and Return Filing Period (e.g. `April`).
 4. **Choose Offline Mode:** Click on the **Prepare Offline** button under the GSTR-1 tile.
-5. **Upload JSON:** In the "Upload" tab, choose the generated `GSTR1_portal.json` file from your workspace `output/` directory and upload it.
+5. **Upload JSON:** In the "Upload" tab, choose the generated `gstr1_portal.json` file from your workspace `output/` directory and upload it.
 6. **Processing:** Wait 1-2 minutes for the portal to process the JSON. Refresh to ensure status says `Processed` with 0 errors.
 7. **View Summary:** Return to the Dashboard and click **Prepare Online** under GSTR-1.
-8. **Reconcile with Filing Pack:** Verify that the summary tile totals match the `output/gstr1-filing-pack.md` **to the rupee**.
+8. **Reconcile with Filing Pack:** Verify that the summary tile totals match the `output/gstr1_filing_pack.md` **to the rupee**.
 9. **Generate Summary & Submit:** Click **Generate Summary**, review the preview PDF, check the declaration box, and click **Proceed to File / File Return**.
 10. **EVC Verification:** Select Authorized Signatory, click **File with EVC**, enter the OTP received on the registered mobile/email, and record the **ARN (Acknowledgement Reference Number)**.
 
@@ -25,13 +25,14 @@ This reference walks through the complete procedure for filing **Form GSTR-1** a
 ### Step 1: Verification of Auto-Drafted Values
 1. On the **Returns Dashboard**, select the tax period and click **Prepare Online** under the GSTR-3B tile.
 2. Verify that **Table 3.1** (Outward Supplies) has auto-populated from your filed GSTR-1.
-3. Verify that **Table 4** (Eligible ITC) aligns with your `output/reconciliation-report.md`. If manual edits are made to Table 4(B) reversals, verify that Net ITC in Table 4(C) matches the computation.
+3. Verify that **Table 4** (Eligible ITC) aligns with your `output/reconciliation_report.md`. If manual edits are made to Table 4(B) reversals, verify that Net ITC in Table 4(C) matches the computation.
 
 ### Step 2: Payment of Tax & Challan Generation (Table 6.1)
 1. Click **Save GSTR-3B** and then **Proceed to Payment**.
 2. Review the **Payment of Tax Table (6.1)**:
    - The portal will automatically apply Rule 88A set-off based on available Credit Ledger balances.
-   - Verify that the **Cash Required** matches `output/gstr3b-filing-pack.md`.
+   - Verify that the **Cash Required** matches `output/gstr3b_filing_pack.md`.
+
 3. **Create Challan (PMT-06):**
    - If Electronic Cash Ledger balance is insufficient, click **Create Challan**.
    - The portal will auto-fill the exact shortfall in each tax head (IGST, CGST, SGST, Cess).

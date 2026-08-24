@@ -10,11 +10,21 @@ import re
 from typing import Any, Dict, List, Literal, Optional, TypedDict
 from pydantic import BaseModel, Field, field_validator
 
+from scripts.constants import CHAR_SET, DATE_REGEX, GSTIN_REGEX, PERIOD_REGEX, STATE_CODES, VALID_RATES
 
-GSTIN_REGEX = re.compile(r"^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$")
-DATE_REGEX = re.compile(r"^(0[1-9]|[12][0-9]|3[01])-(0[1-9]|1[0-2])-20[2-9][0-9]$")
-PERIOD_REGEX = re.compile(r"^(0[1-9]|1[0-2])20[2-9][0-9]$")
-VALID_RATES = {0.0, 0.1, 0.25, 1.5, 3.0, 5.0, 6.0, 12.0, 18.0, 28.0}
+
+def _compute_gstin_checksum(gstin14: str) -> str:
+    factor = 1
+    total = 0
+    for char in gstin14:
+        code_point = CHAR_SET.index(char)
+        addend = factor * code_point
+        factor = 1 if factor == 2 else 2
+        addend = (addend // 36) + (addend % 36)
+        total += addend
+    remainder = total % 36
+    check_code = (36 - remainder) % 36
+    return CHAR_SET[check_code]
 
 
 class TaxAmounts(TypedDict, total=False):
@@ -81,8 +91,11 @@ class StatutoryLateFeeResult(TypedDict, total=False):
     turnover_slab: str
     cgst_late_fee: float
     sgst_late_fee: float
+    camt: float
+    samt: float
     total_late_fee: float
     capped: bool
+
 
 
 class GSTRItem(BaseModel):
@@ -159,6 +172,12 @@ class GSTR1Input(BaseModel):
         v = v.strip().upper()
         if not GSTIN_REGEX.match(v):
             raise ValueError(f"Invalid GSTIN format: '{v}'")
+        state_code = v[:2]
+        if state_code not in STATE_CODES:
+            raise ValueError(f"Invalid State Code '{state_code}' in GSTIN '{v}'")
+        expected = _compute_gstin_checksum(v[:14])
+        if v[14] != expected:
+            raise ValueError(f"GSTIN checksum mismatch for '{v}': expected '{expected}', found '{v[14]}'")
         return v
 
     @field_validator("fp")
@@ -172,8 +191,8 @@ class GSTR1Input(BaseModel):
 class GSTR3BInput(BaseModel):
     gstin: str
     ret_period: str
-    due_date: Optional[str] = "20-05-2026"
-    filing_date: Optional[str] = "20-05-2026"
+    due_date: Optional[str] = None
+    filing_date: Optional[str] = None
     turnover_slab: Literal["upto_1.5cr", "1.5cr_to_5cr", "above_5cr"] = "upto_1.5cr"
     outward_supplies: Dict[str, Any] = Field(default_factory=dict)
     eco_supplies: Dict[str, Any] = Field(default_factory=dict)
@@ -184,3 +203,24 @@ class GSTR3BInput(BaseModel):
     opening_cash_ledger: Dict[str, float] = Field(default_factory=dict)
     interest_details: Dict[str, float] = Field(default_factory=dict)
     late_fee_details: Dict[str, float] = Field(default_factory=dict)
+
+    @field_validator("gstin")
+    @classmethod
+    def validate_gstin_gstr3b(cls, v: str) -> str:
+        v = v.strip().upper()
+        if not GSTIN_REGEX.match(v):
+            raise ValueError(f"Invalid GSTIN format: '{v}'")
+        state_code = v[:2]
+        if state_code not in STATE_CODES:
+            raise ValueError(f"Invalid State Code '{state_code}' in GSTIN '{v}'")
+        expected = _compute_gstin_checksum(v[:14])
+        if v[14] != expected:
+            raise ValueError(f"GSTIN checksum mismatch for '{v}': expected '{expected}', found '{v[14]}'")
+        return v
+
+    @field_validator("ret_period")
+    @classmethod
+    def validate_ret_period(cls, v: str) -> str:
+        if not PERIOD_REGEX.match(v):
+            raise ValueError(f"Invalid ret_period format '{v}'. Expected MMYYYY.")
+        return v

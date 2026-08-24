@@ -20,7 +20,8 @@ import sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from typing import Any, Dict, List, Optional
-from scripts.gst_engine import compute_gstr1_tables, round_cur
+from scripts.gst_engine import compute_gstr1_tables
+from scripts.utils import round_cur
 
 
 def derive_gstr3b_due_date(ret_period: str) -> str:
@@ -106,6 +107,45 @@ def bridge_gstr1_and_2b_to_3b(
             zero_txval += float(itm.get("txval", 0.0))
             zero_iamt += float(itm.get("iamt", 0.0))
             zero_csamt += float(itm.get("csamt", 0.0))
+
+    # --- Net for Credit/Debit Notes (Table 9) & Advances (Table 11) ---
+    # Credit notes (C) reduce taxable, Debit notes (D) increase it
+    from scripts.utils import safe_float
+
+    cdnr_adj_txval = 0.0
+    cdnr_adj_iamt = 0.0
+    cdnr_adj_camt = 0.0
+    cdnr_adj_samt = 0.0
+    cdnr_adj_csamt = 0.0
+    for note in g1_res.get("table_9_cdnr", []):
+        ntty = note.get("ntty", "C")
+        sign = -1.0 if ntty == "C" else 1.0
+        for itm in note.get("items", []):
+            cdnr_adj_txval += sign * safe_float(itm.get("txval", 0.0))
+            cdnr_adj_iamt += sign * safe_float(itm.get("iamt", 0.0))
+            cdnr_adj_camt += sign * safe_float(itm.get("camt", 0.0))
+            cdnr_adj_samt += sign * safe_float(itm.get("samt", 0.0))
+            cdnr_adj_csamt += sign * safe_float(itm.get("csamt", 0.0))
+    # Apply CDN adjustment to taxable outward (intra/inter detection via pos vs supplier_state already handled in items)
+    taxable_txval += cdnr_adj_txval
+    taxable_iamt += cdnr_adj_iamt
+    taxable_camt += cdnr_adj_camt
+    taxable_samt += cdnr_adj_samt
+    taxable_csamt += cdnr_adj_csamt
+
+    # Advances: Table 11A received increases liability, 11B adjusted decreases
+    for adv in g1_res.get("table_11_advances", {}).get("received", []):
+        taxable_txval += safe_float(adv.get("txval", 0.0))
+        taxable_iamt += safe_float(adv.get("iamt", 0.0))
+        taxable_camt += safe_float(adv.get("camt", 0.0))
+        taxable_samt += safe_float(adv.get("samt", 0.0))
+        taxable_csamt += safe_float(adv.get("csamt", 0.0))
+    for adj in g1_res.get("table_11_advances", {}).get("adjusted", []):
+        taxable_txval -= safe_float(adj.get("txval", 0.0))
+        taxable_iamt -= safe_float(adj.get("iamt", 0.0))
+        taxable_camt -= safe_float(adj.get("camt", 0.0))
+        taxable_samt -= safe_float(adj.get("samt", 0.0))
+        taxable_csamt -= safe_float(adj.get("csamt", 0.0))
 
     # Nil/Exempt (Table 8)
     exemp = g1_res.get("table_8_nil_exempt", {})
@@ -237,14 +277,25 @@ def check_drc_mismatch_risks(gstr1_summary: Dict[str, Any], gstr3b_data: Dict[st
 
     drc01b_diff = max(0.0, g1_tax - g3b_tax)
     drc01b_pct = (drc01b_diff / g1_tax * 100.0) if g1_tax > 0 else 0.0
-    drc01b_risk = (drc01b_diff > 2500000.0 or drc01b_pct > 20.0) if drc01b_diff > 0 else False
+    # Statute is 20% AND ₹25L (conservative radar flags on OR, portal uses AND — keep AND for correctness)
+    drc01b_risk = (drc01b_diff > 2500000.0 and drc01b_pct > 20.0) if drc01b_diff > 0 else False
 
-    itc_avail_3b = gstr3b_data.get("itc", {}).get("available", {}).get("all_other", {})
-    g3b_claimed_itc = float(itc_avail_3b.get("iamt", 0.0)) + float(itc_avail_3b.get("camt", 0.0)) + float(itc_avail_3b.get("samt", 0.0)) + float(itc_avail_3b.get("csamt", 0.0))
+    # DRC-01C must check total net ITC claimed (sum all available minus reversals), not just all_other
+    avail = gstr3b_data.get("itc", {}).get("available", {})
+    rev = gstr3b_data.get("itc", {}).get("reversed", {})
+    tot_avail = 0.0
+    for cat_vals in avail.values():
+        if isinstance(cat_vals, dict):
+            tot_avail += float(cat_vals.get("iamt", 0.0)) + float(cat_vals.get("camt", 0.0)) + float(cat_vals.get("samt", 0.0)) + float(cat_vals.get("csamt", 0.0))
+    tot_rev = 0.0
+    for cat_vals in rev.values():
+        if isinstance(cat_vals, dict):
+            tot_rev += float(cat_vals.get("iamt", 0.0)) + float(cat_vals.get("camt", 0.0)) + float(cat_vals.get("samt", 0.0)) + float(cat_vals.get("csamt", 0.0))
+    g3b_claimed_itc = max(0.0, tot_avail - tot_rev)
 
     drc01c_diff = max(0.0, g3b_claimed_itc - gstr2b_total_itc)
     drc01c_pct = (drc01c_diff / gstr2b_total_itc * 100.0) if gstr2b_total_itc > 0 else 0.0
-    drc01c_risk = (drc01c_diff > 100000.0 or drc01c_pct > 10.0) if drc01c_diff > 0 else False
+    drc01c_risk = (drc01c_diff > 100000.0 and drc01c_pct > 10.0) if drc01c_diff > 0 else False
 
     return {
         "drc_01b_liability_mismatch": {
@@ -253,7 +304,7 @@ def check_drc_mismatch_risks(gstr1_summary: Dict[str, Any], gstr3b_data: Dict[st
             "variance": round_cur(drc01b_diff),
             "variance_percentage": round_cur(drc01b_pct),
             "risk_flag": drc01b_risk,
-            "warning": "HIGH RISK: DRC-01B notice will be triggered if variance exceeds 20% or ₹25 Lakh." if drc01b_risk else "SAFE: Liability matches within safe thresholds."
+            "warning": "HIGH RISK: DRC-01B notice will be triggered if variance exceeds 20% AND ₹25 Lakh." if drc01b_risk else "SAFE: Liability matches within safe thresholds."
         },
         "drc_01c_itc_mismatch": {
             "gstr2b_available_itc": round_cur(gstr2b_total_itc),
@@ -261,7 +312,7 @@ def check_drc_mismatch_risks(gstr1_summary: Dict[str, Any], gstr3b_data: Dict[st
             "excess_claimed": round_cur(drc01c_diff),
             "excess_percentage": round_cur(drc01c_pct),
             "risk_flag": drc01c_risk,
-            "warning": "HIGH RISK: DRC-01C notice will be triggered if ITC claimed exceeds GSTR-2B by >10% / ₹1 Lakh." if drc01c_risk else "SAFE: ITC claimed matches GSTR-2B."
+            "warning": "HIGH RISK: DRC-01C notice will be triggered if ITC claimed exceeds GSTR-2B by >10% AND ₹1 Lakh." if drc01c_risk else "SAFE: ITC claimed matches GSTR-2B."
         }
     }
 

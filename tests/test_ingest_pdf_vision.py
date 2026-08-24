@@ -2,8 +2,9 @@
 
 import os
 import pytest
-from scripts.pdf_to_images import convert_multipage_pdf, batch_convert_all_documents
-from scripts.generate_pdf_report import generate_pdf
+from scripts.ingest_pdf_vision import convert_multipage_pdf, batch_convert_all_documents
+from scripts.generate_pdf_statement import generate_pdf
+
 
 
 def test_multipage_pdf_page_by_page_splitting(tmp_path):
@@ -32,6 +33,7 @@ def test_multipage_pdf_page_by_page_splitting(tmp_path):
         assert p["image_filename"].startswith("page_")
         assert p["width"] > 0
         assert p["height"] > 0
+        assert p["extraction_strategy"] in ("DIGITAL_TEXT", "MULTIMODAL_AI_VISION")
 
 
 def test_batch_convert_multi_document_manifest(tmp_path):
@@ -52,9 +54,13 @@ def test_batch_convert_multi_document_manifest(tmp_path):
     generate_pdf(sample_g3b, pdf2)
 
     out_img_dir = str(tmp_path / "batch_images")
-    manifest = batch_convert_all_documents(docs_dir, output_dir=out_img_dir, dpi=150)
+    manifest = batch_convert_all_documents(docs_dir, output_dir=out_img_dir, dpi=150, force_image=True)
 
     assert manifest["total_pdf_documents"] == 2
     assert manifest["total_rendered_page_images"] >= 2
+    assert manifest["force_image_mode"] is True
     assert len(manifest["documents"]) == 2
     assert os.path.exists(os.path.join(out_img_dir, "image_manifest.json"))
+    for doc in manifest["documents"]:
+        for page in doc["pages"]:
+            assert page["extraction_strategy"] == "FORCED_IMAGE_VISION"

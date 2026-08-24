@@ -23,14 +23,7 @@ from typing import Any, Dict, List, Optional
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from scripts.models import TaxAmounts, OptimizationResult, SetOffMatrix, SetOffMatrixRow
-
-
-def round_cur(val: float) -> float:
-    try:
-        d = Decimal(str(val))
-        return float(d.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
-    except Exception:
-        return round(float(val) + 1e-9, 2)
+from scripts.utils import round_cur
 
 
 def optimize_setoff(
@@ -164,13 +157,19 @@ def optimize_setoff(
     # Fallback if a single total interest_amount is supplied
     if (intr_i + intr_c + intr_s + intr_cs) == 0.0 and "interest_amount" in intr:
         tot_intr = float(intr.get("interest_amount", 0.0))
-        # Allocate proportionally or to heads with cash tax
         tot_cash_tax = total_cash_tax_i + total_cash_tax_c + total_cash_tax_s + total_cash_tax_cs
         if tot_cash_tax > 0:
-            intr_i = round_cur(tot_intr * (total_cash_tax_i / tot_cash_tax))
-            intr_c = round_cur(tot_intr * (total_cash_tax_c / tot_cash_tax))
-            intr_s = round_cur(tot_intr * (total_cash_tax_s / tot_cash_tax))
-            intr_cs = round_cur(tot_intr * (total_cash_tax_cs / tot_cash_tax))
+            # Compute 3 heads with HALF_UP, remainder to 4th to preserve total (avoid 1p loss)
+            raw_i = tot_intr * (total_cash_tax_i / tot_cash_tax)
+            raw_c = tot_intr * (total_cash_tax_c / tot_cash_tax)
+            raw_s = tot_intr * (total_cash_tax_s / tot_cash_tax)
+            intr_i = round_cur(raw_i)
+            intr_c = round_cur(raw_c)
+            intr_s = round_cur(raw_s)
+            # remainder ensures sum == tot_intr
+            intr_cs = round_cur(tot_intr - intr_i - intr_c - intr_s)
+            if intr_cs < 0:
+                intr_cs = 0.0
         else:
             intr_i = tot_intr
 
@@ -334,17 +333,9 @@ def optimize_from_input_dict(data: Dict[str, Any]) -> OptimizationResult:
 
 
 def format_table(headers: List[str], rows: List[List[Any]]) -> str:
-    col_widths = [len(h) for h in headers]
-    for row in rows:
-        for i, val in enumerate(row):
-            col_widths[i] = max(col_widths[i], len(str(val)))
+    from scripts.utils import format_table as _ft
 
-    header_line = "| " + " | ".join(h.ljust(col_widths[i]) for i, h in enumerate(headers)) + " |"
-    sep_line = "|-" + "-|-".join("-" * col_widths[i] for i in range(len(headers))) + "-|"
-    data_lines = []
-    for row in rows:
-        data_lines.append("| " + " | ".join(str(val).rjust(col_widths[i]) if isinstance(val, (int, float)) else str(val).ljust(col_widths[i]) for i, val in enumerate(row)) + " |")
-    return "\n".join([header_line, sep_line] + data_lines)
+    return _ft(headers, rows)
 
 
 def main():

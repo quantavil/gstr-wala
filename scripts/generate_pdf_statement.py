@@ -5,7 +5,8 @@ Outputs:
   - output/gstr3b_statement.pdf / .html
 
 Usage:
-  python3 scripts/generate_pdf_report.py <gstr3b_input.json> [output_pdf_path]
+  python3 scripts/generate_pdf_statement.py <gstr3b_input.json> [output_pdf_path]
+
 """
 
 import json

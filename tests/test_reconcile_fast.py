@@ -2,7 +2,8 @@
 
 import time
 import pytest
-from scripts.fast_engine import reconcile_polars_rapidfuzz
+from scripts.reconcile_fast import reconcile_polars_rapidfuzz
+
 
 
 def test_100k_invoice_scale_benchmark():

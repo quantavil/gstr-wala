@@ -14,7 +14,8 @@ import polars as pl
 from python_calamine import CalamineWorkbook
 from rapidfuzz import fuzz, process
 
-from scripts.reconcile_2b import normalize_inum, round_cur
+from scripts.reconcile_gstr2b import normalize_inum, round_cur
+
 
 
 def read_excel_calamine(filepath: str, sheet_index: int = 0) -> List[Dict[str, Any]]:

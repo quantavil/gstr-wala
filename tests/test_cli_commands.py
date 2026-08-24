@@ -27,7 +27,7 @@ def test_cli_reconcile_command():
 def test_cli_pdf_to_images_command(tmp_path):
     # Create a test PDF first
     pytest.importorskip("weasyprint")
-    from scripts.generate_pdf_report import generate_pdf
+    from scripts.generate_pdf_statement import generate_pdf
     pdf_dir = tmp_path / "pdf_in"
     os.makedirs(pdf_dir, exist_ok=True)
     pdf_path = str(pdf_dir / "statement.pdf")
@@ -39,7 +39,7 @@ def test_cli_pdf_to_images_command(tmp_path):
     generate_pdf(sample_g3b, pdf_path)
 
     out_dir = str(tmp_path / "img_out")
-    result = runner.invoke(app, ["pdf-to-images-cmd", str(pdf_dir), "--output-dir", out_dir, "--dpi", "150"])
+    result = runner.invoke(app, ["ingest-pdf", str(pdf_dir), "--output-dir", out_dir, "--dpi", "150", "--force-image"])
     assert result.exit_code == 0
     assert os.path.exists(os.path.join(out_dir, "image_manifest.json"))
 
@@ -58,7 +58,9 @@ def test_cli_pipeline_command(tmp_path):
         "--output-dir", out_dir
     ])
     assert result.exit_code == 0
-    assert os.path.exists(os.path.join(out_dir, "GSTR1_portal.json"))
-    assert os.path.exists(os.path.join(out_dir, "GSTR3B_portal.json"))
-    assert os.path.exists(os.path.join(out_dir, "gstr1-filing-pack.md"))
-    assert os.path.exists(os.path.join(out_dir, "gstr3b-filing-pack.md"))
+    assert os.path.exists(os.path.join(out_dir, "gstr1_portal.json"))
+    assert os.path.exists(os.path.join(out_dir, "gstr3b_portal.json"))
+    assert os.path.exists(os.path.join(out_dir, "gstr1_filing_pack.md"))
+    assert os.path.exists(os.path.join(out_dir, "gstr3b_filing_pack.md"))
+    assert os.path.exists(os.path.join(out_dir, "reconciliation_report.md"))
+

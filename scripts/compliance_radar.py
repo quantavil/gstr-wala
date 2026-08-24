@@ -6,6 +6,7 @@ threshold revisions, late fee caps, DRC triggers) from CBIC notifications & GSTN
 """
 
 import argparse
+import copy
 import json
 import os
 import subprocess
@@ -56,7 +57,7 @@ def apply_compliance_patch(patch_file: str) -> bool:
         patch_data = json.load(f)
 
     current_manifest = load_rules_manifest()
-    backup_manifest = dict(current_manifest)
+    backup_manifest = copy.deepcopy(current_manifest)
 
     print("=" * 70)
     print(" AGENTIC COMPLIANCE RADAR: APPLYING STATUTORY RULE UPDATE")
@@ -70,7 +71,19 @@ def apply_compliance_patch(patch_file: str) -> bool:
             else:
                 d[k] = v
 
+    # Basic allowlist + bounds for statutory patch
+    _ALLOWED_TOP_KEYS = {"statutory_rules", "manifest_version", "effective_date", "last_synced"}
+    for k in patch_data.keys():
+        if k not in _ALLOWED_TOP_KEYS and k not in ("patch_id", "authority", "discovered_triggers"):
+            print(f"Warning: patch key '{k}' not allowlisted — ignoring")
+            patch_data.pop(k, None)
+
     if "statutory_rules" in patch_data:
+        # bounds: B2CL 50k-500k, interest 0-0.30, caps numeric
+        br = patch_data["statutory_rules"].get("b2cl_threshold", {}).get("value")
+        if br is not None and not (50000 <= float(br) <= 500000):
+            print(f"Error: b2cl_threshold {br} out of bounds [50k,500k] — abort")
+            return False
         deep_update(current_manifest["statutory_rules"], patch_data["statutory_rules"])
     if "manifest_version" in patch_data:
         current_manifest["manifest_version"] = patch_data["manifest_version"]
@@ -110,8 +123,8 @@ def print_status():
     print(f" • Section 50(3) Wrong Availment Interest: {r['interest_rates']['section_50_3_wrong_avail_utilized_p_a']*100:.1f}% p.a.")
     print(f" • Section 47 Late Fee (Turnover <= 1.5 Cr): ₹{r['late_fee_caps']['upto_1.5cr_max_cap_total']:,.2f} max cap")
     print(f" • Section 47 Late Fee (Turnover > 5 Cr): ₹{r['late_fee_caps']['above_5cr_max_cap_total']:,.2f} max cap")
-    print(f" • DRC-01B Trigger (Rule 88C): Variance > {r['drc_surveillance_thresholds']['drc_01b_rule_88c']['percentage_threshold']}% or ₹{r['drc_surveillance_thresholds']['drc_01b_rule_88c']['amount_threshold']:,.2f}")
-    print(f" • DRC-01C Trigger (Rule 88D): Excess > {r['drc_surveillance_thresholds']['drc_01c_rule_88d']['percentage_threshold']}% or ₹{r['drc_surveillance_thresholds']['drc_01c_rule_88d']['amount_threshold']:,.2f}")
+    print(f" • DRC-01B Trigger (Rule 88C): Variance > {r['drc_surveillance_thresholds']['drc_01b_rule_88c']['percentage_threshold']}% AND ₹{r['drc_surveillance_thresholds']['drc_01b_rule_88c']['amount_threshold']:,.2f}")
+    print(f" • DRC-01C Trigger (Rule 88D): Excess > {r['drc_surveillance_thresholds']['drc_01c_rule_88d']['percentage_threshold']}% AND ₹{r['drc_surveillance_thresholds']['drc_01c_rule_88d']['amount_threshold']:,.2f}")
     print("=" * 70)
 
 

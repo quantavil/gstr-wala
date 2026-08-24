@@ -17,7 +17,7 @@
 - **GSTR-1 Outward Supply Engine:**
   - Automated Table 4 (B2B), Table 5 (B2CL > ₹1 Lakh per Notification No. 12/2024-CT), Table 6 (Exports & SEZ), Table 7 (B2CS), Table 8 (Nil/Exempt/Non-GST nested schema), Table 9 (CDNR/CDNUR), and Table 13 (Docs).
   - Table 12 HSN Summary with mandatory **Table 12A (B2B)** and **Table 12B (B2C)** bifurcation.
-  - Official GSTN Offline Utility v3.x compliant JSON generator (`output/GSTR1_portal.json`).
+  - Official GSTN Offline Utility v3.x compliant JSON generator (`output/gstr1_portal.json`).
 - **GSTR-2B vs Purchase Register 2-Way Matcher:**
   - High-speed vectorized join via **`polars`** and C++/SIMD fuzzy matching via **`rapidfuzz`** (100,000 invoices processed in 8.9s at 11,204 invoices/sec).
   - Multi-tier matching (`EXACT_MATCH`, `TOLERANCE_MATCH` $\pm ₹1$, `VALUE_MISMATCH`, `IN_BOOKS_ONLY`, `IN_2B_ONLY`).
@@ -25,7 +25,8 @@
   - Rule 37 (180-day non-payment) tracking $\to$ Table 4(B)(2) temporary reversal.
   - Supports CDNR credit notes, ISD distributions, and ICEGATE `impg` imports.
 - **Multi-Page PDF & Invoice Vision Ingestion:**
-  - Uses **`pypdfium2`** (Google Chrome PDFium engine) to split and rasterize multi-page PDF bills into structured `work/images/<doc_name>/page_001.png` images for multimodal AI vision reading with zero system dependencies.
+  - Uses **`PyMuPDF`** (`pymupdf` C engine) to split and rasterize multi-page PDF bills into structured `work/images/<doc_name>/page_001.png` images for multimodal AI vision reading, featuring smart auto-detection (digital text parsing vs scanned photocopy vision routing) and `--force-image` mode.
+
 - **Rule 88A / Section 49 Linear Optimization Solver:**
   - Optimally exhausts IGST credit first, then apportions across CGST and SGST to strictly eliminate stranded credits and minimize net cash outflow.
   - Enforces Section 49(4): Inward RCM liability (Table 3.1(d)) is strictly **100% Cash**.
@@ -36,7 +37,7 @@
 - **DRC-01B & DRC-01C Pre-Emptive Risk Radar:**
   - Real-time detection of Rule 88C (liability mismatch) and Rule 88D (ITC mismatch) threshold deviations before filing.
 - **Agentic Statutory Compliance Radar:**
-  - Live discovery (`scripts/fetch_live_compliance.py`) and self-updating rule engine (`scripts/compliance_radar.py`) with staged testing and automated rollback.
+  - Live discovery (`scripts/discover_statutory_rules.py`) and self-updating rule engine (`scripts/compliance_radar.py`) with staged testing and automated rollback.
 - **Printable Certified CA Statements:**
   - Generates audit-ready PDF computation statements via **`jinja2`** and **`weasyprint`**.
 
@@ -75,17 +76,17 @@ uv run python3 scripts/cli.py pipeline \
 
 ### 2. Batch Convert Multi-Page PDF Invoices to Images
 ```bash
-uv run python3 scripts/cli.py pdf-to-images-cmd docs/invoices/ --output-dir work/images/ --dpi 200
+uv run python3 scripts/cli.py ingest-pdf docs/invoices/ --output-dir work/images/ --dpi 200
 ```
 
 ### 3. Run GSTR-2B Reconciliation (Vectorized High-Speed)
 ```bash
-uv run python3 scripts/cli.py reconcile-cmd examples/sample_purchase_register.json examples/sample_gstr2b.json --fast
+uv run python3 scripts/cli.py reconcile examples/sample_purchase_register.json examples/sample_gstr2b.json --fast
 ```
 
 ### 4. Check Live Statutory Compliance Radar
 ```bash
-uv run python3 scripts/fetch_live_compliance.py
+uv run python3 scripts/discover_statutory_rules.py
 ```
 
 ---
@@ -111,31 +112,33 @@ gstr-wala/
 │   ├── cli.py                        # Typer & Rich interactive CLI
 │   ├── gst_engine.py                 # Outward calculation, Sec 50/47 math
 │   ├── itc_optimizer.py              # Rule 88A linear solver
-│   ├── reconcile_2b.py               # GSTR-2B 2-way matcher
-│   ├── fast_engine.py                # Polars + Calamine + RapidFuzz high-scale engine
-│   ├── pdf_to_images.py              # Multi-page PDF to image rasterizer
+│   ├── reconcile_gstr2b.py           # GSTR-2B 2-way matcher
+│   ├── reconcile_fast.py             # Polars + Calamine + RapidFuzz high-scale engine
+│   ├── ingest_pdf_vision.py          # Multi-page PDF to image rasterizer
+│   ├── bridge_gstr1_to_gstr3b.py     # Outward to 3B bridge & DRC risk scanner
 │   ├── generate_gstr1_json.py        # Official GSTR-1 offline JSON serializer
 │   ├── generate_gstr3b_json.py        # Official GSTR-3B offline JSON serializer
-│   ├── generate_pdf_report.py        # Jinja2 + WeasyPrint CA statement generator
-│   ├── fetch_live_compliance.py      # Live statutory discovery radar
+│   ├── generate_filing_pack.py       # CA Markdown filing pack generator
+│   ├── generate_pdf_statement.py     # Jinja2 + WeasyPrint CA statement generator
+│   ├── discover_statutory_rules.py   # Live statutory discovery radar
 │   ├── compliance_radar.py           # Self-updating compliance engine
 │   └── fuzz_gst_engine.py            # Invariant property fuzzer
 ├── tests/                            # 49 Pytest unit, property & fuzzer tests (100% pass)
 │   ├── fixtures/                     # Authentic GSTN, ERPNext, and SME datasets
 │   ├── test_business_scenarios.py
 │   ├── test_official_gstn_compliance.py
-│   ├── test_generators.py
+│   ├── test_portal_generators.py
 │   ├── test_cli_commands.py
-│   ├── test_hypothesis.py
-│   ├── test_fuzz.py
-│   ├── test_pdf_to_images.py
-│   ├── test_scale_benchmark.py
+│   ├── test_property_invariants.py
+│   ├── test_fuzz_gst_engine.py
+│   ├── test_ingest_pdf_vision.py
+│   ├── test_reconcile_fast.py
 │   ├── test_compliance_radar.py
 │   ├── test_validate_gst_input.py
 │   ├── test_gst_engine.py
 │   ├── test_itc_optimizer.py
-│   ├── test_models_and_cli.py
-│   └── test_reconcile_2b.py
+│   ├── test_models.py
+│   └── test_reconcile_gstr2b.py
 ├── references/                       # Comprehensive statutory field guides
 │   ├── gstr1-table-guide.md
 │   ├── gstr3b-table-guide.md
@@ -144,7 +147,9 @@ gstr-wala/
 │   ├── rates-and-hsn-rules.md
 │   ├── interest-and-late-fees.md
 │   ├── drc-mismatch-audit-guide.md
-│   └── portal-walkthrough.md
+│   ├── portal-walkthrough.md
+│   └── file-naming-standard.md
+
 ├── examples/                         # Real-world sample datasets & portal JSONs
 │   ├── sample_sales_register.json
 │   ├── sample_purchase_register.json

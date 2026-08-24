@@ -6,8 +6,9 @@ from scripts.parse_sales_register import parse_csv_sales
 from scripts.parse_purchase_register import parse_csv_purchases
 from scripts.gst_engine import compute_gstr1_tables, compute_statutory_interest, compute_statutory_late_fee
 from scripts.itc_optimizer import optimize_setoff
-from scripts.reconcile_2b import reconcile
-from scripts.gstr1_to_3b_bridge import bridge_gstr1_and_2b_to_3b, check_drc_mismatch_risks
+from scripts.reconcile_gstr2b import reconcile
+from scripts.bridge_gstr1_to_gstr3b import bridge_gstr1_and_2b_to_3b, check_drc_mismatch_risks
+
 from scripts.generate_gstr1_json import generate_portal_gstr1
 from scripts.generate_gstr3b_json import generate_portal_gstr3b
 
