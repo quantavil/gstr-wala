@@ -15,6 +15,7 @@ from python_calamine import CalamineWorkbook
 from rapidfuzz import fuzz, process
 
 from scripts.reconcile_gstr2b import normalize_inum, round_cur
+from scripts.utils import excel_cell_to_str
 
 
 
@@ -31,7 +32,6 @@ def read_excel_calamine(filepath: str, sheet_index: int = 0) -> List[Dict[str, A
         return []
 
     headers = [str(h).strip().lower() for h in rows[0]]
-    from scripts.utils import excel_cell_to_str
 
     records = []
     for row in rows[1:]:

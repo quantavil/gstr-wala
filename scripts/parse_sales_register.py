@@ -16,9 +16,10 @@ Truthfulness contract:
   - Optional fields absent from the source stay empty/None — never invented.
 
 Usage:
-  python3 scripts/parse_sales_register.py <sales_register.csv|xlsx|json> <gstin> <fp> [output.json]
+  python3 scripts/parse_sales_register.py <sales_register.csv|xlsx|json> <gstin> <fp> [output.json] [--derive-taxes]
 """
 
+import argparse
 import csv
 import json
 import os
@@ -27,7 +28,7 @@ import sys
 # Ensure root directory is on sys.path for standalone script invocation
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 from scripts.utils import excel_cell_to_str, normalize_date_str, safe_float_strict
 from scripts.validate_gst_input import compute_gstin_checksum, is_valid_gstin
 
@@ -95,7 +96,7 @@ def parse_rows_sales(
     # by the CSV and Excel entry points (both funnel through this function).
     all_keys: set = set()
     for row in rows:
-        all_keys.update(str(k).strip().lower() for k in row.keys() if k is not None)
+        all_keys.update(str(k).strip().lower() for k in row if k is not None)
     tax_alias_present = any(alias in all_keys for alias in _TAX_COL_ALIASES)
 
     invoices_map: Dict[str, Dict[str, Any]] = {}
@@ -132,7 +133,7 @@ def parse_rows_sales(
         desc = _pick(row_norm, ("description", "item_description", "desc"))
         uqc = _pick(row_norm, ("uqc", "unit"))
         qty_raw = _pick(row_norm, ("quantity", "qty"))
-        qty: Optional[float]
+        qty: float | None
         if qty_raw:
             try:
                 qty = safe_float_strict(qty_raw)
@@ -187,6 +188,10 @@ def parse_rows_sales(
                     f"GSTIN '{prev_ctin}' but this row declares '{cur_ctin}' — conflicting "
                     f"counterparty for the same invoice number; split or correct the register"
                 )
+            if cur_ctin and not prev_ctin:
+                # First occurrence(s) had a blank GSTIN; backfill so a later
+                # conflicting counterparty is still detected.
+                existing["ctin"] = cur_ctin
         else:
             invoices_map[inum] = {
                 "inum": inum,
@@ -240,24 +245,35 @@ def parse_excel_sales(excel_path: str, gstin: str, fp: str, derive_taxes: bool =
 
 
 def main():
-    if len(sys.argv) < 4:
-        print("Usage: python3 parse_sales_register.py <sales_register.csv|xlsx|json> <gstin> <fp> [output.json]")
-        sys.exit(1)
+    parser = argparse.ArgumentParser(
+        prog="parse_sales_register.py",
+        description="Parses a CSV/Excel/JSON sales register into canonical GSTR-1 input JSON.",
+    )
+    parser.add_argument("sales_file", help="Sales register file (.csv, .xlsx, .xls, .xlsb or .json)")
+    parser.add_argument("gstin", help="Supplier GSTIN")
+    parser.add_argument("fp", help="Filing period, e.g. 042026")
+    parser.add_argument(
+        "out_file", nargs="?", default="gstr1_input.json",
+        help="Output path (default: gstr1_input.json)",
+    )
+    parser.add_argument(
+        "--derive-taxes", action="store_true", dest="derive_taxes",
+        help="Derive tax amounts from the GST rate when the register has no "
+             "IGST/CGST/SGST columns at all (never overrides populated cells)",
+    )
+    args = parser.parse_args()
 
-    sales_file = sys.argv[1]
-    gstin = sys.argv[2]
-    fp = sys.argv[3]
-    out_file = sys.argv[4] if len(sys.argv) > 4 else "gstr1_input.json"
-
+    sales_file = args.sales_file
+    out_file = args.out_file
     if not os.path.exists(sales_file):
         sys.exit(f"Error: File '{sales_file}' not found.")
 
     lower_file = sales_file.lower()
     try:
         if lower_file.endswith(".csv"):
-            canonical = parse_csv_sales(sales_file, gstin, fp)
+            canonical = parse_csv_sales(sales_file, args.gstin, args.fp, derive_taxes=args.derive_taxes)
         elif lower_file.endswith((".xlsx", ".xls", ".xlsb")):
-            canonical = parse_excel_sales(sales_file, gstin, fp)
+            canonical = parse_excel_sales(sales_file, args.gstin, args.fp, derive_taxes=args.derive_taxes)
         elif lower_file.endswith(".json"):
             with open(sales_file, "r", encoding="utf-8") as f:
                 canonical = json.load(f)
@@ -267,7 +283,7 @@ def main():
         sys.exit(f"Error: {exc}")
 
     if not isinstance(canonical, dict) or not canonical.get("invoices"):
-        raise ValueError(f"'{sales_file}' contains no data rows — nothing to file.")
+        sys.exit(f"Error: '{sales_file}' contains no data rows — nothing to file.")
 
     with open(out_file, "w", encoding="utf-8") as f:
         json.dump(canonical, f, indent=2)

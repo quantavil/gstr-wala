@@ -1,0 +1,88 @@
+{
+  "gstin": "27AAAAA0000A1Z2",
+  "fp": "042026",
+  "invoices": [
+    {
+      "inum": "INV-2026-001",
+      "idt": "05-04-2026",
+      "pos": "29",
+      "val": 118000.0,
+      "items": [
+        {
+          "txval": 100000.0,
+          "rt": 18.0,
+          "iamt": 18000.0,
+          "camt": 0.0,
+          "samt": 0.0,
+          "csamt": 0.0,
+          "hsn_sc": "8471",
+          "desc": "Computer hardware",
+          "uqc": "NOS",
+          "qty": 5.0
+        }
+      ],
+      "ctin": "29AAAAA0000A1ZY"
+    },
+    {
+      "inum": "INV-2026-002",
+      "idt": "08-04-2026",
+      "pos": "27",
+      "val": 236000.0,
+      "items": [
+        {
+          "txval": 200000.0,
+          "rt": 18.0,
+          "iamt": 0.0,
+          "camt": 18000.0,
+          "samt": 18000.0,
+          "csamt": 0.0,
+          "hsn_sc": "9983",
+          "desc": "Software consulting services",
+          "uqc": "OTH",
+          "qty": 1.0
+        }
+      ],
+      "ctin": "27BBBBB1111B1ZN"
+    },
+    {
+      "inum": "INV-2026-003",
+      "idt": "12-04-2026",
+      "pos": "29",
+      "val": 177000.0,
+      "items": [
+        {
+          "txval": 150000.0,
+          "rt": 18.0,
+          "iamt": 27000.0,
+          "camt": 0.0,
+          "samt": 0.0,
+          "csamt": 0.0,
+          "hsn_sc": "8471",
+          "desc": "Monitors",
+          "uqc": "NOS",
+          "qty": 10.0
+        }
+      ]
+    },
+    {
+      "inum": "INV-2026-004",
+      "idt": "15-04-2026",
+      "pos": "27",
+      "val": 59000.0,
+      "items": [
+        {
+          "txval": 50000.0,
+          "rt": 18.0,
+          "iamt": 0.0,
+          "camt": 4500.0,
+          "samt": 4500.0,
+          "csamt": 0.0,
+          "hsn_sc": "8471",
+          "desc": "Keyboards and mouse",
+          "uqc": "NOS",
+          "qty": 25.0
+        }
+      ]
+    }
+  ]
+}

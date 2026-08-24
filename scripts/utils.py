@@ -37,12 +37,44 @@ _EURO_DECIMAL_MSG = (
 )
 
 
+def _reject_money(s: str, why: str = "is not a parseable monetary amount") -> ValueError:
+    return ValueError(f"{s!r} {why}")
+
+
+def _validate_grouping_shape(t: str, original: str) -> None:
+    """Validates comma grouping before comma-stripping.
+
+    Canonical shapes: Indian "1,23,456[.78]" and US "123,456[.78]" — every
+    comma-delimited integer group is 1-3 digits with the FINAL group exactly 3,
+    optionally followed by a single decimal part. Rejects irregular widths
+    ("1,2345"), dangling commas ("1000," / ",1000") and stray separators.
+    """
+    if "." in t:
+        head, dec = t.rsplit(".", 1)
+        if "." in head or not dec.isdigit():
+            raise _reject_money(original)
+    else:
+        head, dec = t, ""
+
+    groups = head.split(",")
+    if any(not g.isdigit() or len(g) > 3 for g in groups):
+        raise _reject_money(original)
+    final = groups[-1]
+    if len(groups) > 1 and len(final) != 3:
+        if len(final) == 2:
+            # Trailing 2-digit group is European decimal style -> refuse to guess.
+            raise ValueError(_EURO_DECIMAL_MSG.format(val=original))
+        raise _reject_money(original)
+
+
 def _parse_money_string(s: str) -> float:
     """Parses a money string truthfully; raises ValueError on anything ambiguous.
 
     Handles accounting negatives "(1,234.56)", currency symbols (₹, Rs., INR),
-    Indian digit grouping "1,23,456.78" and US grouping. Rejects European
-    decimal-comma format ("1.234,56") instead of mis-parsing it.
+    Indian digit grouping "1,23,456.78" and US grouping "1,234,567.89". Rejects
+    European decimal-comma format ("1.234,56"), dangling commas ("1000,"),
+    malformed grouping ("1,2345") and residual sign characters ("--5", "+-5")
+    instead of mis-parsing them.
     """
     t = s.strip()
     if not t:
@@ -58,29 +90,25 @@ def _parse_money_string(s: str) -> float:
 
     if t.startswith("-"):
         negative = True
-        t = t[1:]
+        t = t.removeprefix("-")
     elif t.endswith("-"):  # trailing-minus accounting convention
         negative = True
-        t = t[:-1]
+        t = t.removesuffix("-")
     if t.startswith("+"):
-        t = t[1:]
+        t = t.removeprefix("+")
 
-    if not t:
+    # At most one leading/trailing sign was consumed above; any residual sign
+    # character means multi-sign garbage — refuse rather than silently flipping
+    # the value again ("--5" must not become 5.0, "+-5" must not become -5.0).
+    if not t or "-" in t or "+" in t:
         raise ValueError(f"{s!r} is not a valid monetary amount")
 
-    has_dot = "." in t
-    has_comma = "," in t
-    if has_dot and has_comma:
-        # Whichever separator appears last is the decimal separator.
-        if t.rfind(",") > t.rfind("."):
+    if "," in t:
+        # Whichever separator appears last is the decimal separator; a comma
+        # after the dot is European decimal-comma format.
+        if "." in t and t.rfind(",") > t.rfind("."):
             raise ValueError(_EURO_DECIMAL_MSG.format(val=s))
-        t = t.replace(",", "")
-    elif has_comma:
-        # Comma-only: valid only as thousands grouping, whose final group is
-        # always 3 digits in both Indian and US conventions. A trailing
-        # 2-digit group is European decimal style -> refuse rather than guess.
-        if len(t.split(",")[-1]) == 2:
-            raise ValueError(_EURO_DECIMAL_MSG.format(val=s))
+        _validate_grouping_shape(t, s)
         t = t.replace(",", "")
 
     if not _RE_PLAIN_NUMBER.match(t):
@@ -95,7 +123,9 @@ def _to_float_truthful(val: Any) -> float:
     if val is None:
         raise ValueError("None is not a valid monetary amount")
     if isinstance(val, bool):
-        raise ValueError(f"boolean {val!r} is not a valid monetary amount")
+        # Wrong *type* (not malformed content) -> TypeError per convention;
+        # safe_float() catches both, so lenient behavior is unchanged.
+        raise TypeError(f"boolean {val!r} is not a valid monetary amount")
     if isinstance(val, (int, float)):
         f = float(val)
         if math.isnan(f) or math.isinf(f):
@@ -180,23 +210,29 @@ def normalize_date_str(raw: Any, context: str = "") -> str:
 
     m_dmy = _RE_DMY.match(s)
     m_ymd = _RE_YMD.match(s)
-    try:
-        if m_dmy:
-            parsed = datetime.datetime.strptime(s.replace("/", "-"), "%d-%m-%Y")
-        elif m_ymd:
-            parsed = datetime.datetime.strptime(s, "%Y-%m-%d")
-        else:
+    if m_dmy:
+        try:
+            parsed = datetime.datetime.strptime(s.replace("/", "-"), "%d-%m-%Y")  # noqa: DTZ007 — invoice dates are timezone-naive by definition
+        except ValueError as exc:
             raise ValueError(
-                f"{prefix}unparseable invoice date {raw!r} — expected DD-MM-YYYY, "
-                f"DD/MM/YYYY or YYYY-MM-DD"
-            )
-    except ValueError as exc:
-        if "unparseable invoice date" in str(exc):
-            raise
+                f"{prefix}calendar-invalid invoice date {raw!r} — expected "
+                f"DD-MM-YYYY, DD/MM/YYYY or YYYY-MM-DD"
+            ) from exc
+    elif m_ymd:
+        try:
+            parsed = datetime.datetime.strptime(s, "%Y-%m-%d")  # noqa: DTZ007 — invoice dates are timezone-naive by definition
+        except ValueError as exc:
+            raise ValueError(
+                f"{prefix}calendar-invalid invoice date {raw!r} — expected "
+                f"DD-MM-YYYY, DD/MM/YYYY or YYYY-MM-DD"
+            ) from exc
+    else:
+        # Shape errors are raised outside the strptime calls above so we never
+        # have to sniff our own exception text to tell them apart.
         raise ValueError(
-            f"{prefix}calendar-invalid invoice date {raw!r} — expected "
-            f"DD-MM-YYYY, DD/MM/YYYY or YYYY-MM-DD"
-        ) from exc
+            f"{prefix}unparseable invoice date {raw!r} — expected DD-MM-YYYY, "
+            f"DD/MM/YYYY or YYYY-MM-DD"
+        )
     return parsed.strftime("%d-%m-%Y")
 
 

@@ -71,17 +71,19 @@ def parse_csv_purchases(csv_path: str) -> List[Dict[str, Any]]:
         )
         if not inum or inum == "INV-UNKNOWN":
             raise ValueError(f"Row {row_idx}: missing invoice number (invoice_number/inum)")
-        date_raw = (
-            row_norm.get("invoice_date")
-            or row_norm.get("date")
-            or row_norm.get("idt")
-            or ""
-        )
+        date_raw = ""
+        date_alias = ""
+        for alias in ("invoice_date", "date", "idt"):
+            val = row_norm.get(alias)
+            if val:
+                date_raw = val
+                date_alias = alias
+                break
         if not date_raw:
             raise ValueError(
                 f"Row {row_idx}: missing invoice date (tried columns: invoice_date, date, idt) — refusing to fabricate one"
             )
-        idt = normalize_date_str(date_raw, context=f"Row {row_idx} column 'invoice_date'")
+        idt = normalize_date_str(date_raw, context=f"Row {row_idx} column '{date_alias}'")
         ctin = row_norm.get("supplier_gstin") or row_norm.get("gstin") or row_norm.get("ctin") or ""
         pos = row_norm.get("pos") or ""
 
@@ -129,13 +131,24 @@ def main():
         sys.exit(f"Error: File '{input_file}' not found.")
 
     lower_file = input_file.lower()
-    if lower_file.endswith(".csv"):
-        purchases = parse_csv_purchases(input_file)
-    elif lower_file.endswith(".json"):
-        with open(input_file, "r", encoding="utf-8") as f:
-            purchases = json.load(f)
-    else:
-        sys.exit("Error: Currently .csv and .json files are supported.")
+    try:
+        if lower_file.endswith(".csv"):
+            purchases = parse_csv_purchases(input_file)
+        elif lower_file.endswith(".json"):
+            with open(input_file, "r", encoding="utf-8") as f:
+                loaded = json.load(f)
+            # Accept either a bare list or an already-wrapped document; never
+            # double-wrap into {"purchases": {"purchases": [...]}}.
+            purchases = loaded.get("purchases", []) if isinstance(loaded, dict) else loaded
+            if not isinstance(purchases, list):
+                sys.exit(
+                    f"Error: '{input_file}' must contain a list of purchase "
+                    f"invoices or an object with a 'purchases' array."
+                )
+        else:
+            sys.exit("Error: Currently .csv and .json files are supported.")
+    except ValueError as exc:
+        sys.exit(f"Error: {exc}")
 
     with open(out_file, "w", encoding="utf-8") as f:
         json.dump({"purchases": purchases}, f, indent=2)

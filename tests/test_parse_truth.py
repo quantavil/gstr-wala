@@ -8,6 +8,7 @@ European decimal-comma mis-parsing).
 import datetime
 import json
 import os
+from pathlib import Path
 
 import pytest
 
@@ -109,6 +110,33 @@ class TestStrictRaisesOnGarbage:
         assert safe_float("80,000.00") == 80000.0
 
 
+class TestMalformedGroupingShapesRejected:
+    """Live-verified mis-parses that must be refused, not coerced."""
+
+    @pytest.mark.parametrize("bad", ["1,2345", "1000,", "--5", "+-5"])
+    def test_malformed_shape_rejected(self, bad):
+        assert safe_float(bad) == 0.0  # lenient: default, never a wrong number
+        with pytest.raises(ValueError):
+            safe_float_strict(bad)
+
+    @pytest.mark.parametrize(
+        ("raw", "want"),
+        [
+            ("1,23,456.78", 123456.78),
+            ("12,34,56,789", 123456789.0),
+            ("1,234,567.89", 1234567.89),
+            ("(1,234.56)", -1234.56),
+            ("₹ 2,50,000.75", 250000.75),
+            ("Rs. 1,000", 1000.0),
+            ("1234.56", 1234.56),
+            (".5", 0.5),
+            ("500-", -500.0),
+        ],
+    )
+    def test_valid_forms_still_parse(self, raw, want):
+        assert safe_float_strict(raw) == want
+
+
 # ---------------------------------------------------------------------------
 # 2. excel_cell_to_str: kills ".0"-poisoning at every Excel entry point
 # ---------------------------------------------------------------------------
@@ -128,7 +156,7 @@ class TestExcelCellToStr:
         assert excel_cell_to_str(None) == ""
 
     def test_datetime_becomes_ddmmyyyy(self):
-        assert excel_cell_to_str(datetime.datetime(2026, 4, 5)) == "05-04-2026"
+        assert excel_cell_to_str(datetime.datetime(2026, 4, 5)) == "05-04-2026"  # noqa: DTZ001 — naive Excel cells are the scenario under test
 
     def test_date_becomes_ddmmyyyy(self):
         assert excel_cell_to_str(datetime.date(2026, 12, 31)) == "31-12-2026"
@@ -155,7 +183,7 @@ class TestNormalizeDateStr:
     def test_us_looking_date_interpreted_as_ddmm(self):
         # 04-05-2026 must be 4 May (DD-MM), not April 5th (US MM-DD)
         assert normalize_date_str("04-05-2026") == "04-05-2026"
-        d = datetime.datetime.strptime(normalize_date_str("04-05-2026"), "%d-%m-%Y")
+        d = datetime.datetime.strptime(normalize_date_str("04-05-2026"), "%d-%m-%Y")  # noqa: DTZ007 — timezone-naive by design
         assert d.day == 4 and d.month == 5
 
     def test_calendar_invalid_rejected(self):
@@ -174,7 +202,7 @@ class TestNormalizeDateStr:
         assert "Row 3" in str(exc.value)
 
     def test_excel_datetime_object_accepted(self):
-        assert normalize_date_str(datetime.datetime(2026, 4, 5)) == "05-04-2026"
+        assert normalize_date_str(datetime.datetime(2026, 4, 5)) == "05-04-2026"  # noqa: DTZ001 — naive Excel cells are the scenario under test
 
 
 # ---------------------------------------------------------------------------
@@ -245,6 +273,30 @@ class TestSalesRegisterTruthfulness:
         with pytest.raises(ValueError) as exc:
             parse_rows_sales(rows, GSTIN, FP)
         assert "INV-DUP" in str(exc.value)
+
+    def test_blank_ctin_first_then_conflicting_row_raises(self):
+        # First occurrence has a blank GSTIN; the conflict must fire once a
+        # later row supplies one and a third row contradicts it.
+        rows = _sales_rows(
+            ["INV-BLANKCTIN", "05-04-2026", "", "27", "10000", "18", "1800", "", ""],
+            ["INV-BLANKCTIN", "05-04-2026", "29AAAAA0000A1ZY", "29", "20000", "18", "3600", "", ""],
+            ["INV-BLANKCTIN", "05-04-2026", "27BBBBB1111B1ZN", "27", "30000", "18", "", "5400", "5400"],
+        )
+        with pytest.raises(ValueError) as exc:
+            parse_rows_sales(rows, GSTIN, FP)
+        msg = str(exc.value)
+        assert "INV-BLANKCTIN" in msg
+        assert "29AAAAA0000A1ZY" in msg and "27BBBBB1111B1ZN" in msg
+
+    def test_blank_ctin_backfilled_consistently_still_merges(self):
+        rows = _sales_rows(
+            ["INV-FILL", "05-04-2026", "", "27", "10000", "18", "1800", "", ""],
+            ["INV-FILL", "05-04-2026", "29AAAAA0000A1ZY", "29", "20000", "18", "3600", "", ""],
+        )
+        result = parse_rows_sales(rows, GSTIN, FP)
+        assert len(result["invoices"]) == 1
+        assert result["invoices"][0]["ctin"] == "29AAAAA0000A1ZY"
+        assert len(result["invoices"][0]["items"]) == 2
 
     def test_same_ctin_same_inum_merges_as_line_items(self):
         rows = _sales_rows(
@@ -324,7 +376,7 @@ class TestExplicitZeroTaxCellsVsAbsentColumns:
     def test_excel_path_shares_the_same_logic(self, capsys):
         # Same typed-cell shape as calamine output; exercises shared code path.
         raw_rows = [{
-            "invoice_number": "INV-XL", "invoice_date": datetime.datetime(2026, 4, 10),
+            "invoice_number": "INV-XL", "invoice_date": datetime.datetime(2026, 4, 10),  # noqa: DTZ001 — naive Excel cells are the scenario under test
             "customer_gstin": GSTIN, "pos": "27",
             "taxable_value": 10000.0, "gst_rate": 18.0,
             "igst": None, "cgst": None, "sgst": None,
@@ -351,7 +403,7 @@ class TestExplicitZeroTaxCellsVsAbsentColumns:
 
     def test_excel_float_poisoning_killed_at_parser_level(self):
         # Simulates calamine-typed cells reaching the row normalizer.
-        rows = [{"invoice_number": 1001.0, "invoice_date": datetime.datetime(2026, 4, 5),
+        rows = [{"invoice_number": 1001.0, "invoice_date": datetime.datetime(2026, 4, 5),  # noqa: DTZ001 — naive Excel cells are the scenario under test
                  "customer_gstin": GSTIN, "pos": "27", "taxable_value": 5000.0,
                  "gst_rate": 0.0}]
         result = parse_rows_sales(rows, GSTIN, FP)
@@ -378,7 +430,7 @@ class TestSalesRegisterEntryPoints:
         assert item["txval"] == 100000.0 and item["iamt"] == 18000.0
         assert item["hsn_sc"] == "8471" and item["qty"] == 5.0 and item["uqc"] == "NOS"
 
-    def test_main_cli_roundtrip_on_sample(self, tmp_path, monkeypatch, capsys):
+    def test_main_cli_roundtrip_matches_committed_golden(self, tmp_path, monkeypatch):
         out = tmp_path / "out.json"
         monkeypatch.setattr(
             "sys.argv",
@@ -389,10 +441,11 @@ class TestSalesRegisterEntryPoints:
         from scripts.parse_sales_register import main as sales_main
         sales_main()
         generated = json.loads(out.read_text(encoding="utf-8"))
-        golden_path = "/tmp/opencode/golden/sales_before.json"
-        if os.path.exists(golden_path):
-            golden = json.loads(open(golden_path, encoding="utf-8").read())
-            assert generated == golden
+        # Unconditional regression: any parser behavior change on the sample
+        # register must be a deliberate, reviewed fixture update.
+        golden_path = os.path.join(REPO_ROOT, "tests", "fixtures", "golden_sales.json")
+        golden = json.loads(Path(golden_path).read_text(encoding="utf-8"))
+        assert generated == golden
 
     def test_main_rejects_empty_csv(self, tmp_path, monkeypatch):
         empty = tmp_path / "empty.csv"
@@ -403,6 +456,39 @@ class TestSalesRegisterEntryPoints:
         from scripts.parse_sales_register import main as sales_main
         with pytest.raises(SystemExit):
             sales_main()
+
+    def _no_tax_cols_csv(self, tmp_path):
+        csv = tmp_path / "notax.csv"
+        csv.write_text(
+            "invoice_number,invoice_date,customer_gstin,pos,taxable_value,gst_rate\n"
+            f"INV-DT,05-04-2026,{GSTIN},27,10000,18\n",
+            encoding="utf-8",
+        )
+        return csv
+
+    def test_main_derive_taxes_flag_enables_derivation(self, tmp_path, monkeypatch):
+        out = tmp_path / "out.json"
+        monkeypatch.setattr(
+            "sys.argv",
+            ["parse_sales_register.py", str(self._no_tax_cols_csv(tmp_path)),
+             GSTIN, FP, str(out), "--derive-taxes"],
+        )
+        from scripts.parse_sales_register import main as sales_main
+        sales_main()
+        data = json.loads(out.read_text(encoding="utf-8"))
+        item = data["invoices"][0]["items"][0]
+        assert item["camt"] == 900.0 and item["samt"] == 900.0 and item["iamt"] == 0.0
+
+    def test_main_without_flag_exits_cleanly_naming_the_flag(self, tmp_path, monkeypatch, capsys):
+        monkeypatch.setattr(
+            "sys.argv",
+            ["parse_sales_register.py", str(self._no_tax_cols_csv(tmp_path)), GSTIN, FP,
+             str(tmp_path / "o.json")],
+        )
+        from scripts.parse_sales_register import main as sales_main
+        with pytest.raises(SystemExit) as ei:
+            sales_main()
+        assert "derive_taxes=True" in str(ei.value.code)
 
 
 # ---------------------------------------------------------------------------
@@ -420,6 +506,29 @@ class TestPurchaseRegisterTruthfulness:
         with pytest.raises(ValueError) as exc:
             parse_csv_purchases(str(p))
         assert "invoice_date" in str(exc.value) or "date" in str(exc.value).lower()
+
+    def test_date_error_names_supplying_alias(self, tmp_path):
+        # Value came from the generic 'date' column — the calendar-invalid
+        # error must name that alias, not a hardcoded 'invoice_date'.
+        p = tmp_path / "pr.csv"
+        p.write_text(
+            "invoice_number,date,supplier_gstin,taxable_value\nPUR-9,31-02-2026,29AAAAA0000A1ZY,500\n",
+            encoding="utf-8",
+        )
+        with pytest.raises(ValueError) as exc:
+            parse_csv_purchases(str(p))
+        assert "column 'date'" in str(exc.value)
+        assert "column 'invoice_date'" not in str(exc.value)
+
+    def test_date_error_for_idt_alias_names_idt(self, tmp_path):
+        p = tmp_path / "pr.csv"
+        p.write_text(
+            "invoice_number,idt,supplier_gstin,taxable_value\nPUR-9,31-02-2026,29AAAAA0000A1ZY,500\n",
+            encoding="utf-8",
+        )
+        with pytest.raises(ValueError) as exc:
+            parse_csv_purchases(str(p))
+        assert "column 'idt'" in str(exc.value)
 
     def test_fabricated_default_date_gone(self, tmp_path):
         p = tmp_path / "pr.csv"
@@ -452,14 +561,14 @@ class TestPurchaseRegisterTruthfulness:
         p = tmp_path / "pr.csv"
         p.write_text(
             "invoice_number,invoice_date,supplier_gstin,taxable_value\n"
-            f"PUR-1,2026-04-05,29AAAAA0000A1ZY,500\n",
+            "PUR-1,2026-04-05,29AAAAA0000A1ZY,500\n",
             encoding="utf-8",
         )
         purchases = parse_csv_purchases(str(p))
         assert purchases[0]["idt"] == "05-04-2026"
         p.write_text(
             "invoice_number,invoice_date,supplier_gstin,taxable_value\n"
-            f"PUR-1,31-02-2026,29AAAAA0000A1ZY,500\n",
+            "PUR-1,31-02-2026,29AAAAA0000A1ZY,500\n",
             encoding="utf-8",
         )
         with pytest.raises(ValueError):
@@ -469,7 +578,7 @@ class TestPurchaseRegisterTruthfulness:
         p = tmp_path / "pr.csv"
         p.write_text(
             "invoice_number,invoice_date,supplier_gstin,taxable_value,cgst\n"
-            f"PUR-2,05-04-2026,29AAAAA0000A1ZY,\"(1,000.00)\",(90.00)\n",
+            "PUR-2,05-04-2026,29AAAAA0000A1ZY,\"(1,000.00)\",(90.00)\n",
             encoding="utf-8",
         )
         purchases = parse_csv_purchases(str(p))
@@ -488,7 +597,7 @@ class TestPurchaseRegisterTruthfulness:
     def test_main_extension_check_case_insensitive(self, tmp_path, monkeypatch):
         src = os.path.join(REPO_ROOT, "examples", "sample_purchase_register.csv")
         upper = tmp_path / "REGISTER.CSV"
-        upper.write_bytes(open(src, "rb").read())
+        upper.write_bytes(Path(src).read_bytes())
         out = tmp_path / "purchases.json"
         monkeypatch.setattr(
             "sys.argv", ["parse_purchase_register.py", str(upper), str(out)]
@@ -498,21 +607,22 @@ class TestPurchaseRegisterTruthfulness:
         data = json.loads(out.read_text(encoding="utf-8"))
         assert len(data["purchases"]) == 3
 
-    def test_main_golden_output_on_sample(self, tmp_path, monkeypatch):
+    def test_main_golden_output_matches_committed_golden(self, tmp_path, monkeypatch):
         out = tmp_path / "purchases.json"
         monkeypatch.setattr(
             "sys.argv",
             ["parse_purchase_register.py",
-             os.path.join(REPO_ROOT, "examples", "sample_purchase_register.csv"),
+             os.path.join(REPO_ROOT, "examples", "sample_purchase_register.json"),
              str(out)],
         )
         from scripts.parse_purchase_register import main as pr_main
         pr_main()
         generated = json.loads(out.read_text(encoding="utf-8"))
-        golden_path = "/tmp/opencode/golden/purchase_before.json"
-        if os.path.exists(golden_path):
-            golden = json.loads(open(golden_path, encoding="utf-8").read())
-            assert generated == golden
+        # Unconditional regression: locks the canonical {"purchases": [...]}
+        # shape (no double-wrapping) and every parsed field of the sample.
+        golden_path = os.path.join(REPO_ROOT, "tests", "fixtures", "golden_purchase.json")
+        golden = json.loads(Path(golden_path).read_text(encoding="utf-8"))
+        assert generated == golden
 
 
 # ---------------------------------------------------------------------------
