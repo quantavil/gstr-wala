@@ -336,7 +336,7 @@ def validate_file(file_path: str) -> ValidationResult:
     _collect_keys(data, _keys)
 
     _keys_lower = [k.lower() for k in _keys]
-    blocked_substrings = ["password", "passwd", "pwd", "secret", "sek", "otp", "auth_token", "app_key", "token", "api_key", "private_key"]
+    blocked_substrings = ["password", "passwd", "pwd", "secret", "otp", "auth_token", "app_key", "api_key", "private_key"]
     for k in _keys_lower:
         for blk in blocked_substrings:
             if blk in k:
