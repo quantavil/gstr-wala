@@ -27,13 +27,15 @@ from scripts.utils import round_cur
 
 def derive_gstr3b_due_date(ret_period: str) -> str:
     """Derives default GSTR-3B monthly due date (20th of succeeding month)."""
-    if len(ret_period) == 6 and ret_period.isdigit():
-        mm = int(ret_period[:2])
-        yyyy = int(ret_period[2:])
-        next_mm = mm + 1 if mm < 12 else 1
-        next_yyyy = yyyy if mm < 12 else yyyy + 1
-        return f"20-{next_mm:02d}-{next_yyyy}"
-    return "20-05-2026"
+    if not ret_period or len(ret_period) != 6 or not ret_period.isdigit():
+        return ""
+    mm = int(ret_period[:2])
+    yyyy = int(ret_period[2:])
+    if not (1 <= mm <= 12 and 2020 <= yyyy <= 2035):
+        return ""
+    next_mm = mm + 1 if mm < 12 else 1
+    next_yyyy = yyyy if mm < 12 else yyyy + 1
+    return f"20-{next_mm:02d}-{next_yyyy}"
 
 
 def bridge_gstr1_and_2b_to_3b(

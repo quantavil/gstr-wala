@@ -169,6 +169,15 @@ def optimize_setoff(
             # remainder ensures sum == tot_intr
             intr_cs = round_cur(tot_intr - intr_i - intr_c - intr_s)
             if intr_cs < 0:
+                # borrow negative remainder from largest head (typically intr_s) to avoid negative cess and preserve total
+                if intr_s >= intr_c and intr_s >= intr_i:
+                    intr_s = round_cur(intr_s + intr_cs)
+                elif intr_c >= intr_i:
+                    intr_c = round_cur(intr_c + intr_cs)
+                else:
+                    intr_i = round_cur(intr_i + intr_cs)
+                intr_cs = 0.0
+            if intr_cs == 0:
                 intr_cs = 0.0
         else:
             intr_i = tot_intr

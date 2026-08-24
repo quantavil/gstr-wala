@@ -330,11 +330,28 @@ def compute_statutory_late_fee(is_nil_return: bool, turnover_slab: str, due_date
 
 def compute(data: Dict[str, Any]) -> Dict[str, Any]:
     """Primary computation dispatch."""
-    if "invoices" in data or "fp" in data:
+    if "ret_period" in data or "outward_supplies" in data:
+        # GSTR-3B branch first (reliability: avoid misclassifying 3B as 1 when both keys present)
+        outward = data.get("outward_supplies", {}).get("taxable", {})
+        txval = float(outward.get("txval", 0.0))
+        iamt = float(outward.get("iamt", 0.0))
+        camt = float(outward.get("camt", 0.0))
+        samt = float(outward.get("samt", 0.0))
+        csamt = float(outward.get("csamt", 0.0))
+        total_tax = iamt + camt + samt + csamt
+        return {
+            "return_type": "GSTR-3B",
+            "gstin": data.get("gstin", ""),
+            "ret_period": data.get("ret_period", ""),
+            "taxable_turnover": txval,
+            "total_tax_liability": total_tax,
+            "breakdown": {"iamt": iamt, "camt": camt, "samt": samt, "csamt": csamt}
+        }
+    elif "invoices" in data or "fp" in data:
         gstr1_res = compute_gstr1_tables(data)
         return {"return_type": "GSTR-1", **gstr1_res}
     else:
-        # Handle standalone 3B calculations if given
+        # fallback: treat as GSTR-3B standalone
         outward = data.get("outward_supplies", {}).get("taxable", {})
         txval = float(outward.get("txval", 0.0))
         iamt = float(outward.get("iamt", 0.0))
