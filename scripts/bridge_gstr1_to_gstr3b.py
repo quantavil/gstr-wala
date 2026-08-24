@@ -20,6 +20,7 @@ import sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from typing import Any, Dict, List, Optional
+from scripts.constants import DRC_01B_AMT, DRC_01B_PCT, DRC_01C_AMT, DRC_01C_PCT
 from scripts.gst_engine import compute_gstr1_tables
 from scripts.utils import round_cur
 
@@ -278,7 +279,7 @@ def check_drc_mismatch_risks(gstr1_summary: Dict[str, Any], gstr3b_data: Dict[st
     drc01b_diff = max(0.0, g1_tax - g3b_tax)
     drc01b_pct = (drc01b_diff / g1_tax * 100.0) if g1_tax > 0 else 0.0
     # Statute is 20% AND ₹25L (conservative radar flags on OR, portal uses AND — keep AND for correctness)
-    drc01b_risk = (drc01b_diff > 2500000.0 and drc01b_pct > 20.0) if drc01b_diff > 0 else False
+    drc01b_risk = (drc01b_diff > DRC_01B_AMT and drc01b_pct > DRC_01B_PCT) if drc01b_diff > 0 else False
 
     # DRC-01C must check total net ITC claimed (sum all available minus reversals), not just all_other
     avail = gstr3b_data.get("itc", {}).get("available", {})
@@ -295,7 +296,7 @@ def check_drc_mismatch_risks(gstr1_summary: Dict[str, Any], gstr3b_data: Dict[st
 
     drc01c_diff = max(0.0, g3b_claimed_itc - gstr2b_total_itc)
     drc01c_pct = (drc01c_diff / gstr2b_total_itc * 100.0) if gstr2b_total_itc > 0 else 0.0
-    drc01c_risk = (drc01c_diff > 100000.0 and drc01c_pct > 10.0) if drc01c_diff > 0 else False
+    drc01c_risk = (drc01c_diff > DRC_01C_AMT and drc01c_pct > DRC_01C_PCT) if drc01c_diff > 0 else False
 
     return {
         "drc_01b_liability_mismatch": {
