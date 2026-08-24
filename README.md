@@ -1,6 +1,6 @@
 # gstr-wala 🇮🇳
 
-[![Tests](https://img.shields.io/badge/pytest-49%20passed-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/pytest-62%20passed-brightgreen.svg)]()
 [![Python](https://img.shields.io/badge/python-3.12%2B-blue.svg)]()
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 
@@ -123,7 +123,7 @@ gstr-wala/
 │   ├── discover_statutory_rules.py   # Live statutory discovery radar
 │   ├── compliance_radar.py           # Self-updating compliance engine
 │   └── fuzz_gst_engine.py            # Invariant property fuzzer
-├── tests/                            # 49 Pytest unit, property & fuzzer tests (100% pass)
+├── tests/                            # 62 Pytest unit, property & fuzzer tests (100% pass)
 │   ├── fixtures/                     # Authentic GSTN, ERPNext, and SME datasets
 │   ├── test_business_scenarios.py
 │   ├── test_official_gstn_compliance.py
@@ -138,7 +138,8 @@ gstr-wala/
 │   ├── test_gst_engine.py
 │   ├── test_itc_optimizer.py
 │   ├── test_models.py
-│   └── test_reconcile_gstr2b.py
+│   ├── test_reconcile_gstr2b.py
+│   └── test_bridge_gstr3b.py
 ├── references/                       # Comprehensive statutory field guides
 │   ├── gstr1-table-guide.md
 │   ├── gstr3b-table-guide.md

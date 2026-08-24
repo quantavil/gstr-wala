@@ -59,7 +59,7 @@ All engines live in `scripts/`, reference guides in `references/`, schemas in `s
   ```bash
   uv run pytest -q
   ```
-  Expect all 49 tests to pass. If any test fails, stop immediately.
+  Expect all 62 tests to pass. If any test fails, stop immediately.
 - Confirm session parameters:
   - Taxpayer GSTIN & State
   - Return Period (e.g. `042026` for April 2026)
@@ -208,7 +208,7 @@ Whenever a new CBIC notification or GST Council advisory is issued:
    ```bash
    python3 scripts/compliance_radar.py --apply patch.json
    ```
-   The engine stages the threshold changes in `config/rules_manifest.json`, runs all 49 test suites and invariant fuzzers, and commits the update only if 100% pass (with automatic rollback on failure).
+   The engine stages the threshold changes in `config/rules_manifest.json`, runs all 62 test suites and invariant fuzzers, and commits the update only if 100% pass (with automatic rollback on failure).
 
 
 ---

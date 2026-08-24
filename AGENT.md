@@ -11,6 +11,7 @@
 
 
 ## Blunder Log (Root Cause + Fix)
+- **2026-08-24:** Reliability hardening — made `gst_engine.compute_gstr1_tables` pure (copy-on-write `inv_view`), unified `reconcile_fast` empty shape + dedup, wired `constants.B2CL_THRESHOLD/DRC` to `rules_manifest.json` single source, hardened `compliance_radar` nested allowlist/bounds/finite/atomic-save, removed credential scan false positives `sek`/`token`, capped PDF `dpi 72-300` + `doc.close()` + relative paths, enabled Jinja `autoescape`, validated `derive_gstr3b_due_date` and `compute` dispatch + interest remainder 1p. Added 13 reliability regression tests (49→62). Updated README/SKILL/AGENT counts.
 - **2026-08-24:** Standardized repository file naming across scripts, tests, references, and output artifacts (e.g. `ingest_pdf_vision.py`, `reconcile_gstr2b.py`, `reconcile_fast.py`, `bridge_gstr1_to_gstr3b.py`, `discover_statutory_rules.py`).
 - **2026-08-24:** Unified PDF processing stack on PyMuPDF (`pymupdf`), removing `pdfplumber` and `pypdfium2` (-51MB venv, 0 transitive crypto CVEs), adding smart digital text vs scanned vision auto-detection and `--force-image` mode.
 - **2026-08-24:** Avoided recursive subprocess execution in `scripts/compliance_radar.py` by targeting core business test suites explicitly.
@@ -40,6 +41,6 @@
 - `scripts/generate_pdf_statement.py`: Jinja2 + WeasyPrint certified CA statement generator.
 - `scripts/discover_statutory_rules.py`: Live statutory compliance discovery radar.
 - `scripts/compliance_radar.py`: Self-updating statutory rule engine.
-- `tests/`: 49 Pytest unit, integration, property (Hypothesis), contract, and fuzz tests (100% pass via `uv run pytest`).
+- `tests/`: 62 Pytest unit, integration, property (Hypothesis), contract, and fuzz tests (100% pass via `uv run pytest`).
 
 
