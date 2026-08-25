@@ -124,7 +124,7 @@ HTML_TEMPLATE_GSTR3B = """
   </thead>
   <tbody>
     <tr>
-      <td>4(A)(5) All Other ITC (GSTR-2B Matched)</td>
+      <td>Total Available ITC (A1+A3+A4+A5, GSTR-2B matched)</td>
       <td class="num">{{ "%.2f"|format(itc_avl_i) }}</td>
       <td class="num">{{ "%.2f"|format(itc_avl_c) }}</td>
       <td class="num">{{ "%.2f"|format(itc_avl_s) }}</td>
@@ -221,18 +221,30 @@ def generate_pdf(g3b_data: dict[str, Any], output_pdf_path: str) -> bool:
     rcm = outward.get("rcm_inward", sup_det.get("isup_rev", {}))
 
     itc = g3b_data.get("itc", {})
-    avail = itc.get("available", {}).get("all_other", {})
-    rev = itc.get("reversed", {}).get("permanent_17_5_rules", {})
+    avail_bucket = itc.get("available", {})
+    rev_bucket = itc.get("reversed", {})
 
-    avl_i = float(avail.get("iamt", 0.0))
-    avl_c = float(avail.get("camt", 0.0))
-    avl_s = float(avail.get("samt", 0.0))
-    avl_cs = float(avail.get("csamt", 0.0))
+    def _sum_bucket(bucket: dict[str, Any], keys: list[str]) -> dict[str, float]:
+        out = {"iamt": 0.0, "camt": 0.0, "samt": 0.0, "csamt": 0.0}
+        for k in keys:
+            node = bucket.get(k, {})
+            if isinstance(node, dict):
+                for tax in out:
+                    out[tax] += float(node.get(tax, 0.0) or 0.0)
+        return out
 
-    rev_i = float(rev.get("iamt", 0.0))
-    rev_c = float(rev.get("camt", 0.0))
-    rev_s = float(rev.get("samt", 0.0))
-    rev_cs = float(rev.get("csamt", 0.0))
+    # Table 4(C) = all A heads minus both B heads (canonical keys)
+    avail_sum = _sum_bucket(avail_bucket, ["import_goods", "import_services", "rcm_inward", "isd", "all_other"])
+    rev_sum = _sum_bucket(rev_bucket, ["permanent_17_5_rules", "temporary_others"])
+    avl_i = avail_sum["iamt"]
+    avl_c = avail_sum["camt"]
+    avl_s = avail_sum["samt"]
+    avl_cs = avail_sum["csamt"]
+
+    rev_i = rev_sum["iamt"]
+    rev_c = rev_sum["camt"]
+    rev_s = rev_sum["samt"]
+    rev_cs = rev_sum["csamt"]
 
     env = Environment(autoescape=True)
     template = env.from_string(HTML_TEMPLATE_GSTR3B)
@@ -270,7 +282,10 @@ def generate_pdf(g3b_data: dict[str, Any], output_pdf_path: str) -> bool:
         challan=c
     )
 
-    html_path = output_pdf_path.replace(".pdf", ".html")
+    if output_pdf_path.lower().endswith(".pdf"):
+        html_path = output_pdf_path[:-4] + ".html"
+    else:
+        html_path = output_pdf_path + ".html"
     os.makedirs(os.path.dirname(output_pdf_path) or ".", exist_ok=True)
     with open(html_path, "w", encoding="utf-8") as f:
         f.write(rendered_html)

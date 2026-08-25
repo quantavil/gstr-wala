@@ -59,10 +59,10 @@ All engines live in `scripts/`, reference guides in `references/`, schemas in `s
   ```bash
   uv run pytest -q
   ```
-  Expect all 210 tests to pass. If any test fails, stop immediately.
+  Expect all 227 tests to pass. If any test fails, stop immediately.
 - Confirm session parameters:
   - Taxpayer GSTIN & State
-  - Return Period (e.g. `042026` for April 2026)
+  - Return Period — monthly MMYYYY (e.g. `042026` for April 2026); QRMP quarterly not yet supported — use explicit due date if needed
   - Due date and planned filing date
   - Annual Turnover slab (`upto_1.5cr`, `1.5cr_to_5cr`, `above_5cr`)
 
@@ -86,10 +86,8 @@ Ask the user to drop their records into `docs/`:
 4. **Scanned PDF Invoices / Paper Bills:**
    - If the user provides multi-page PDF bills or paper receipts, batch convert them into structured page-by-page images:
      ```bash
-     uv run python3 scripts/cli.py ingest-pdf docs/ work/images/ --dpi 200
+     uv run python3 scripts/cli.py ingest-pdf docs/ --output-dir work/images/ --dpi 200
      ```
-
-
    - Inspect generated page images in `work/images/<doc_name>/page_001.png` using visual tools.
 
 ### Step 3: Extract & Validate GSTR-1 Sales
@@ -144,9 +142,9 @@ Ask the user to drop their records into `docs/`:
   python3 scripts/bridge_gstr1_to_gstr3b.py work/gstr1_input.json work/reconciliation.json work/gstr3b_input.json
   ```
 
-  - Routes SEZ supplies to Table 3.1(b) Zero-Rated.
-  - Wires inward RCM liability from reconciliation to Table 3.1(d) (Outward liability payable 100% in cash) and Table 4(A)(3) (Eligible Inward RCM ITC).
-- The bridge automatically executes the **Pre-Emptive DRC-01B / DRC-01C Radar** to guarantee outward liabilities and ITC claims are within safe departmental thresholds.
+   - Routes SEZ supplies to Table 3.1(b) Zero-Rated.
+   - Wires inward RCM liability from reconciliation to Table 3.1(d) (Outward liability payable 100% in cash) and Table 4(A)(3) (Eligible Inward RCM ITC).
+- The **pipeline** (`scripts/cli.py pipeline`) automatically executes the **Pre-Emptive DRC-01B / DRC-01C Radar** to guarantee outward liabilities and ITC claims are within safe thresholds. The standalone bridge (`scripts/bridge_gstr1_to_gstr3b.py`) only populates Table 3/4; run the radar via the pipeline or `python3 -c "from scripts.bridge_gstr1_to_gstr3b import check_drc_mismatch_risks; ..."`.
 
 ### Step 7: Optimize ITC Set-Off & Compute PMT-06 Challan
 - Execute the Rule 88A optimization solver:
@@ -208,7 +206,7 @@ Whenever a new CBIC notification or GST Council advisory is issued:
    ```bash
    python3 scripts/compliance_radar.py --apply patch.json
    ```
-   The engine stages the threshold changes in `config/rules_manifest.json`, runs all 210 test suites and invariant fuzzers, and commits the update only if 100% pass (with automatic rollback on failure).
+   The engine stages the threshold changes in `config/rules_manifest.json`, runs all 227 test suites and invariant fuzzers, and commits the update only if 100% pass (with automatic rollback on failure).
 
 
 ---
@@ -230,15 +228,15 @@ Whenever a new CBIC notification or GST Council advisory is issued:
 
 | Reference Document | Read When |
 |---|---|
-| [`references/gstr1-table-guide.md`](file:///home/quantavil/Documents/Project/gstr-wala/references/gstr1-table-guide.md) | Explaining or validating any GSTR-1 table (4, 5, 6, 7, 8, 9, 11, 12, 13) |
-| [`references/gstr3b-table-guide.md`](file:///home/quantavil/Documents/Project/gstr-wala/references/gstr3b-table-guide.md) | Explaining or checking any GSTR-3B table (3.1, 3.1.1, 3.2, 4, 5, 5.1, 6.1) |
-| [`references/itc-rules-and-setoff.md`](file:///home/quantavil/Documents/Project/gstr-wala/references/itc-rules-and-setoff.md) | Reviewing Section 16, 17(5) blocked credits, Rule 37/37A, and Rule 88A |
-| [`references/gstr2b-reconciliation-guide.md`](file:///home/quantavil/Documents/Project/gstr-wala/references/gstr2b-reconciliation-guide.md) | Handling purchase register vs 2B reconciliation & vendor disputes |
-| [`references/rates-and-hsn-rules.md`](file:///home/quantavil/Documents/Project/gstr-wala/references/rates-and-hsn-rules.md) | Checking GST tax rates (0-28%), Cess, HSN digit rules (4 vs 6), and UQCs |
-| [`references/interest-and-late-fees.md`](file:///home/quantavil/Documents/Project/gstr-wala/references/interest-and-late-fees.md) | Computing Section 50 net cash interest or Section 47 late fee caps |
-| [`references/drc-mismatch-audit-guide.md`](file:///home/quantavil/Documents/Project/gstr-wala/references/drc-mismatch-audit-guide.md) | Evaluating DRC-01B (Rule 88C) and DRC-01C (Rule 88D) mismatch risks |
-| [`references/portal-walkthrough.md`](file:///home/quantavil/Documents/Project/gstr-wala/references/portal-walkthrough.md) | Guiding the user through upload, payment, and EVC filing on gst.gov.in |
-| [`references/file-naming-standard.md`](file:///home/quantavil/Documents/Project/gstr-wala/references/file-naming-standard.md) | Reference for repository file naming conventions across code, tests, and outputs |
+| [`references/gstr1-table-guide.md`](references/gstr1-table-guide.md) | Explaining or validating any GSTR-1 table (4, 5, 6, 7, 8, 9, 11, 12, 13) |
+| [`references/gstr3b-table-guide.md`](references/gstr3b-table-guide.md) | Explaining or checking any GSTR-3B table (3.1, 3.1.1, 3.2, 4, 5, 5.1, 6.1) |
+| [`references/itc-rules-and-setoff.md`](references/itc-rules-and-setoff.md) | Reviewing Section 16, 17(5) blocked credits, Rule 37/37A, and Rule 88A |
+| [`references/gstr2b-reconciliation-guide.md`](references/gstr2b-reconciliation-guide.md) | Handling purchase register vs 2B reconciliation & vendor disputes |
+| [`references/rates-and-hsn-rules.md`](references/rates-and-hsn-rules.md) | Checking GST tax rates (0-28%), Cess, HSN digit rules (4 vs 6), and UQCs |
+| [`references/interest-and-late-fees.md`](references/interest-and-late-fees.md) | Computing Section 50 net cash interest or Section 47 late fee caps |
+| [`references/drc-mismatch-audit-guide.md`](references/drc-mismatch-audit-guide.md) | Evaluating DRC-01B (Rule 88C) and DRC-01C (Rule 88D) mismatch risks |
+| [`references/portal-walkthrough.md`](references/portal-walkthrough.md) | Guiding the user through upload, payment, and EVC filing on gst.gov.in |
+| [`references/file-naming-standard.md`](references/file-naming-standard.md) | Reference for repository file naming conventions across code, tests, and outputs |
 
 
 ---

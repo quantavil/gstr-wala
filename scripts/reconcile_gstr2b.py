@@ -21,6 +21,7 @@ Usage:
 import json
 import os
 import sys
+import warnings
 from datetime import UTC, date, datetime
 from typing import Any
 
@@ -60,8 +61,13 @@ def _is_section_16_4_expired(idt_str: str | None, cutoff_date_str: str | None = 
     try:
         norm_idt = normalize_date_str(str(idt_str).strip())
         inv_dt = _parse_dmy_date(norm_idt)
-    except (ValueError, TypeError, IndexError):
-        return False
+    except (ValueError, TypeError, IndexError) as e:
+        warnings.warn(
+            f"Section 16(4) gate: malformed invoice date {idt_str!r} — treating as time-barred: {e}",
+            UserWarning,
+            stacklevel=2,
+        )
+        return True
 
     # Financial year in India runs April 1 to March 31
     fy_end_year = inv_dt.year if inv_dt.month <= 3 else inv_dt.year + 1
@@ -71,7 +77,12 @@ def _is_section_16_4_expired(idt_str: str | None, cutoff_date_str: str | None = 
         try:
             norm_cutoff = normalize_date_str(str(cutoff_date_str).strip())
             eval_date = _parse_dmy_date(norm_cutoff)
-        except (ValueError, TypeError, IndexError):
+        except (ValueError, TypeError, IndexError) as e:
+            warnings.warn(
+                f"Section 16(4) gate: malformed cutoff {cutoff_date_str!r} — falling back to today: {e}",
+                UserWarning,
+                stacklevel=2,
+            )
             eval_date = datetime.now(UTC).date()
     else:
         eval_date = datetime.now(UTC).date()

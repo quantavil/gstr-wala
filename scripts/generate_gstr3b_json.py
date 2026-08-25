@@ -196,10 +196,13 @@ def generate_portal_gstr3b(input_data: dict[str, Any], portal_version: str | Non
         ]
     }
 
-    # Table 6.1: tx_pmt (Tax Payment & Optimal Set-off)
+    # Interest / Late fee via optimizer (Plan 01+03)
     opt_res = optimize_from_input_dict(input_data)
     m = opt_res["setoff_matrix"]
     cash_tax = opt_res.get("cash_tax_payable", {})
+    interest_liab = opt_res.get("interest_liability", {})
+    # Late fee not in portal interest_details; portal expects only interest per-head
+    # Keep late fee separate if needed in future; currently not emitted to portal
 
     tx_pmt = {
         "tx_py": [
@@ -242,7 +245,7 @@ def generate_portal_gstr3b(input_data: dict[str, Any], portal_version: str | Non
         ]
     }
 
-    return {
+    portal: dict[str, Any] = {
         "version": portal_version or GSTR3B_PORTAL_VERSION,
         "gstin": gstin,
         "ret_period": ret_period,
@@ -253,6 +256,15 @@ def generate_portal_gstr3b(input_data: dict[str, Any], portal_version: str | Non
         "inward_sup": inward_sup,
         "tx_pmt": tx_pmt
     }
+    # Emit interest_details when non-zero (schema optional)
+    if any(interest_liab.get(k, 0) for k in ("iamt", "camt", "samt", "csamt")):
+        portal["interest_details"] = {
+            "iamt": round_cur(interest_liab.get("iamt", 0.0)),
+            "camt": round_cur(interest_liab.get("camt", 0.0)),
+            "samt": round_cur(interest_liab.get("samt", 0.0)),
+            "csamt": round_cur(interest_liab.get("csamt", 0.0)),
+        }
+    return portal
 
 
 def main():
@@ -269,6 +281,21 @@ def main():
 
     with open(in_file, encoding="utf-8") as f:
         data = json.load(f)
+
+    from scripts.validate_gst_input import validate_gstr3b_input
+
+    val_res = validate_gstr3b_input(data)
+    if not val_res.is_valid:
+        print(f"Error: Validation failed with {len(val_res.errors)} error(s):")
+        for e in val_res.errors:
+            print(f"  - {e}")
+        if val_res.warnings:
+            for w in val_res.warnings:
+                print(f"  [!] {w}")
+        sys.exit(1)
+    if val_res.warnings:
+        for w in val_res.warnings:
+            print(f"  [!] {w}", file=sys.stderr)
 
     portal_json = generate_portal_gstr3b(data)
 

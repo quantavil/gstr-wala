@@ -12,6 +12,7 @@ Usage:
 import json
 import os
 import sys
+from typing import Any
 
 # Ensure root directory is on sys.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -50,15 +51,45 @@ app = typer.Typer(
 console = Console()
 
 
+_TURNOVER_SLABS = ("upto_1.5cr", "1.5cr_to_5cr", "above_5cr")
+
+
+def _coerce_purchase_list(pr_data: Any) -> list[Any] | None:
+    """Coerces purchase register JSON into a list without AttributeError traceback.
+
+    Returns None when a dict-shaped register has no recognized 'purchases'/'invoices'
+    array (caller should warn); returns [] for legitimately empty registers.
+    """
+    if isinstance(pr_data, dict):
+        raw = pr_data.get("purchases")
+        if raw is None:
+            raw = pr_data.get("invoices")
+        if raw is None:
+            return None
+        if not isinstance(raw, list):
+            return None
+        return [r for r in raw if isinstance(r, dict)]
+    elif isinstance(pr_data, list):
+        return [r for r in pr_data if isinstance(r, dict)]
+    else:
+        return None
+
+
 @app.command()
 def pipeline(
     sales: str = typer.Option(..., "--sales", "-s", help="Path to Sales Register JSON"),
     purchases: str = typer.Option(..., "--purchases", "-p", help="Path to Purchase Register JSON"),
     gstr2b: str = typer.Option(..., "--gstr2b", "-b", help="Path to official GSTR-2B JSON"),
     output_dir: str = typer.Option("output", "--output-dir", "-o", help="Output directory for filing packs"),
-    pdf: bool = typer.Option(True, "--pdf/--no-pdf", help="Generate printable CA PDF statement")
+    pdf: bool = typer.Option(True, "--pdf/--no-pdf", help="Generate printable CA PDF statement"),
+    due_date: str = typer.Option(None, "--due-date", help="GSTR-3B due date DD-MM-YYYY; defaults to 20th of next month"),
+    filing_date: str = typer.Option(None, "--filing-date", help="Actual filing date DD-MM-YYYY; defaults to due date"),
+    turnover_slab: str = typer.Option("upto_1.5cr", "--turnover-slab", help="Turnover slab for late fee caps (upto_1.5cr|1.5cr_to_5cr|above_5cr)"),
 ) -> None:
     """Executes the complete deterministic end-to-end GST return pipeline."""
+    if turnover_slab not in _TURNOVER_SLABS:
+        console.print(f"[bold red]Invalid --turnover-slab '{turnover_slab}'. Allowed: {', '.join(_TURNOVER_SLABS)}[/bold red]")
+        raise typer.Exit(1)
     console.print(Panel.fit(
         "[bold green]gstr-wala[/bold green] [cyan]• Indian GST Return Filing Pipeline[/cyan]\n"
         "[dim]Deterministic Python Engines • Rule 88A Optimization • Zero External Data Leaks[/dim]",
@@ -86,7 +117,10 @@ def pipeline(
     with open(gstr2b, encoding="utf-8") as f:
         g2b_data = json.load(f)
 
-    pr_list = pr_data.get("purchases", pr_data) if isinstance(pr_data, dict) else pr_data
+    pr_list = _coerce_purchase_list(pr_data)
+    if pr_list is None:
+        console.print("[yellow]![/yellow] Purchase register JSON has no 'purchases'/'invoices' array — treating as 0 invoices.")
+        pr_list = []
     recon_res = reconcile(pr_list, g2b_data)
     recon_out = os.path.join(output_dir, "reconciliation.json")
     with open(recon_out, "w", encoding="utf-8") as f:
@@ -106,7 +140,7 @@ def pipeline(
 
     # 4. Bridge to GSTR-3B & DRC Check
     console.print("\n[bold yellow]Step 4/6:[/bold yellow] Auto-Populating GSTR-3B & Scanning DRC-01B/C Risks...")
-    g3b_input = bridge_gstr1_and_2b_to_3b(g1_data, recon_res)
+    g3b_input = bridge_gstr1_and_2b_to_3b(g1_data, recon_res, due_date=due_date, filing_date=filing_date, turnover_slab=turnover_slab)
     g3b_in_path = os.path.join(output_dir, "gstr3b_input.json")
     with open(g3b_in_path, "w", encoding="utf-8") as f:
         json.dump(g3b_input, f, indent=2)
@@ -212,7 +246,10 @@ def reconcile_command(
     with open(gstr2b, encoding="utf-8") as f:
         g2b = json.load(f)
 
-    pr_list = pr.get("purchases", pr) if isinstance(pr, dict) else pr
+    pr_list = _coerce_purchase_list(pr)
+    if pr_list is None:
+        console.print("[yellow]![/yellow] Purchase register JSON has no 'purchases'/'invoices' array — treating as 0 invoices.")
+        pr_list = []
 
     if fast:
         g2b_flat = flatten_gstr2b(g2b)

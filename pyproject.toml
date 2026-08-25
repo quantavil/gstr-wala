@@ -59,7 +59,7 @@ addopts = "-v --tb=short --cov=scripts --cov-report=term-missing"
 
 [tool.coverage.run]
 source = ["scripts"]
-omit = ["tests/*"]
+omit = ["tests/*", "scripts/benchmark_stress.py"]
 
 [tool.mypy]
 python_version = "3.12"

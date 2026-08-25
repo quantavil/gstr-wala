@@ -32,7 +32,12 @@ from scripts.utils import round_cur
 
 
 def derive_gstr3b_due_date(ret_period: str) -> str:
-    """Derives default GSTR-3B monthly due date (20th of succeeding month)."""
+    """Derives default GSTR-3B monthly due date (20th of succeeding month).
+
+    Note: Only monthly filing (MMYYYY) is supported. For QRMP quarterly
+    periods (e.g., 062026 for Apr-Jun quarter), pass --due-date explicitly;
+    this function returns the monthly next-month 20th as a fallback.
+    """
     if not ret_period or len(ret_period) != 6 or not ret_period.isdigit():
         return ""
     mm = int(ret_period[:2])
@@ -376,7 +381,11 @@ def main() -> None:
     parser.add_argument("g1_input", help="Path to GSTR-1 Input JSON")
     parser.add_argument("pos_args", nargs="*", help="Optional [recon_input] [output_3b]")
     parser.add_argument("--recon", dest="recon_opt", default=None, help="Explicit path to reconciliation JSON")
-    parser.add_argument("-o", "--output", dest="out_opt", default=None, help="Explicit path to output GSTR-3B JSON")
+    parser.add_argument("-o", "--output", dest="out_opt", default=None, help="Explicit path to output GSTR-3B JSON (overrides positional output)")
+    parser.add_argument("--due-date", dest="due_date_cli", default=None, help="GSTR-3B due date DD-MM-YYYY; defaults to 20th of next month")
+    parser.add_argument("--filing-date", dest="filing_date_cli", default=None, help="Actual filing date DD-MM-YYYY; defaults to due date (on-time)")
+    parser.add_argument("--turnover-slab", dest="turnover_slab_cli", default=None, choices=["upto_1.5cr", "1.5cr_to_5cr", "above_5cr"], help="Turnover slab for late fee caps")
+    parser.add_argument("-f", "--force", action="store_true", help="Allow overwriting existing output file")
 
     args = parser.parse_args()
 
@@ -393,7 +402,7 @@ def main() -> None:
                 recon_file = arg0
             else:
                 is_recon = False
-                if os.path.exists(arg0) and "3b" not in arg0.lower():
+                if os.path.exists(arg0):
                     try:
                         with open(arg0, encoding="utf-8") as f_check:
                             sample = json.load(f_check)
@@ -407,7 +416,7 @@ def main() -> None:
                     out_file = arg0
         elif len(args.pos_args) >= 2:
             recon_file = args.pos_args[0] if not recon_file else recon_file
-            out_file = args.pos_args[1]
+            out_file = args.pos_args[1] if not args.out_opt else args.out_opt
 
     with open(g1_file, encoding="utf-8") as f:
         g1_data = json.load(f)
@@ -417,7 +426,39 @@ def main() -> None:
         with open(recon_file, encoding="utf-8") as f:
             recon_data = json.load(f)
 
-    g3b_input = bridge_gstr1_and_2b_to_3b(g1_data, recon_data)
+    # Validate optional date args early with actionable message
+    due_cli = args.due_date_cli
+    filing_cli = args.filing_date_cli
+    slab_cli = args.turnover_slab_cli or "upto_1.5cr"
+    from scripts.models import validate_date_str
+
+    for flag_name, flag_val in (("--due-date", due_cli), ("--filing-date", filing_cli)):
+        if flag_val is not None:
+            try:
+                validate_date_str(flag_val.strip())
+            except Exception as e:
+                parser.error(f"{flag_name} {flag_val!r} is not DD-MM-YYYY: {e}")
+
+    # Overwrite guard — protect recon input from being destroyed; explicit output paths may overwrite.
+    if os.path.exists(out_file) and not args.force:
+        try:
+            if recon_file and os.path.samefile(out_file, recon_file):
+                parser.error(f"Output file '{out_file}' is the same as recon input '{recon_file}' — refusing to overwrite. Use --force or choose different -o path.")
+        except OSError:
+            pass
+        # Only block if existing file looks like a recon input (data loss risk)
+        try:
+            with open(out_file, encoding="utf-8") as _f:
+                _existing = json.load(_f)
+            if isinstance(_existing, dict) and ("gstr3b_table_4_auto_population" in _existing or "summary" in _existing):
+                parser.error(f"Output file '{out_file}' appears to be a reconciliation input — refusing to overwrite. Use --force or choose a different -o path.")
+        except Exception:
+            pass
+
+    g3b_input = bridge_gstr1_and_2b_to_3b(
+        g1_data, recon_data,
+        due_date=due_cli, filing_date=filing_cli, turnover_slab=slab_cli,
+    )
 
     with open(out_file, "w", encoding="utf-8") as f:
         json.dump(g3b_input, f, indent=2)

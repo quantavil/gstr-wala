@@ -1,6 +1,6 @@
 # gstr-wala 🇮🇳
 
-[![Tests](https://img.shields.io/badge/pytest-210%20passed-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/pytest-227%20passed-brightgreen.svg)]()
 [![Python](https://img.shields.io/badge/python-3.12%2B-blue.svg)]()
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 
@@ -72,6 +72,7 @@ uv run python3 scripts/cli.py pipeline \
   --purchases examples/sample_purchase_register.json \
   --gstr2b examples/sample_gstr2b.json \
   --output-dir output
+# Monthly MMYYYY only; for QRMP quarterly pass explicit --due-date (e.g., --due-date 22-07-2026 --filing-date 05-08-2026)
 ```
 
 ### 2. Batch Convert Multi-Page PDF Invoices to Images
@@ -123,7 +124,7 @@ gstr-wala/
 │   ├── discover_statutory_rules.py   # Live statutory discovery radar
 │   ├── compliance_radar.py           # Self-updating compliance engine
 │   └── fuzz_gst_engine.py            # Invariant property fuzzer
-├── tests/                            # 210 Pytest unit, property & fuzzer tests (100% pass)
+├── tests/                            # 227 Pytest unit, property & fuzzer tests (100% pass)
 │   ├── fixtures/                     # Authentic GSTN, ERPNext, and SME datasets
 │   ├── test_business_scenarios.py
 │   ├── test_official_gstn_compliance.py
