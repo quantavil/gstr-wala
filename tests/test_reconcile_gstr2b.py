@@ -13,12 +13,12 @@ def test_normalize_invoice_number():
 
 def test_full_reconciliation_cycle():
     pr_invoices = [
-        {"ctin": "29BBBBB1111B1Z2", "inum": "INV/2026/101", "txval": 10000.0, "iamt": 1800.0},
-        {"ctin": "29BBBBB1111B1Z2", "inum": "INV-102", "txval": 5000.0, "iamt": 900.50},
-        {"ctin": "29CCCCC2222C1Z3", "inum": "INV-103", "txval": 20000.0, "iamt": 3600.0, "is_blocked_17_5": True},
-        {"ctin": "29DDDDD3333D1Z4", "inum": "INV-104", "txval": 10000.0, "iamt": 1800.0, "unpaid_days": 200},
-        {"ctin": "29EEEEE4444E1Z5", "inum": "INV-105", "txval": 50000.0, "iamt": 9000.0},
-        {"ctin": "29FFFFF5555F1Z6", "inum": "INV-106", "txval": 10000.0, "iamt": 1800.0}
+        {"ctin": "29BBBBB1111B1Z2", "inum": "INV/2026/101", "idt": "10-04-2026", "txval": 10000.0, "iamt": 1800.0},
+        {"ctin": "29BBBBB1111B1Z2", "inum": "INV-102", "idt": "12-04-2026", "txval": 5000.0, "iamt": 900.50},
+        {"ctin": "29CCCCC2222C1Z3", "inum": "INV-103", "idt": "15-04-2026", "txval": 20000.0, "iamt": 3600.0, "is_blocked_17_5": True},
+        {"ctin": "29DDDDD3333D1Z4", "inum": "INV-104", "idt": "15-04-2026", "txval": 10000.0, "iamt": 1800.0, "unpaid_days": 200},
+        {"ctin": "29EEEEE4444E1Z5", "inum": "INV-105", "idt": "15-04-2026", "txval": 50000.0, "iamt": 9000.0},
+        {"ctin": "29FFFFF5555F1Z6", "inum": "INV-106", "idt": "15-04-2026", "txval": 10000.0, "iamt": 1800.0}
     ]
 
     g2b_raw = {
@@ -66,15 +66,16 @@ def test_full_reconciliation_cycle():
     t4 = res["gstr3b_table_4_auto_population"]
 
     assert s["exact_matched_count"] == 1
-    assert s["tolerance_matched_count"] == 1
+    assert s["tolerance_matched_count"] == 0  # trailing-number suggestion is held
     assert s["blocked_17_5_count"] == 1
     assert s["rule_37_count"] == 1
     assert s["in_books_only_count"] == 1
     assert s["in_2b_only_count"] == 1
     assert s["ineligible_2b_count"] == 1
 
-    # Matched ITC in Table 4(A)(5) = 1800 (INV-101) + 900 (INV-102) = 2700
-    assert t4["table_4_a_5_all_other_itc"]["iamt"] == 2700.0
+    # Gross includes amounts reversed below; the trailing-number candidate is held.
+    assert t4["table_4_a_5_all_other_itc"]["iamt"] == 7200.0
+    assert t4["table_4_c_net_itc"]["iamt"] == 1800.0
 
     # Permanent reversal 4(B)(1) = 3600 (INV-103)
     assert t4["table_4_b_1_permanent_reversals_17_5"]["iamt"] == 3600.0
@@ -92,7 +93,7 @@ def test_full_reconciliation_cycle():
 def test_rcm_inward_not_double_counted():
     """B1 Test: RCM invoice (rchrg='Y') must go to 4(A)(3) and NOT into 4(A)(5) 'All Other ITC'."""
     pr_invoices = [
-        {"ctin": "29BBBBB1111B1Z2", "inum": "RCM-001", "txval": 50000.0, "iamt": 9000.0}
+        {"ctin": "29BBBBB1111B1Z2", "inum": "RCM-001", "idt": "10-04-2026", "txval": 50000.0, "iamt": 9000.0, "rcm_paid": True}
     ]
     g2b_raw = {
         "data": {
@@ -144,7 +145,7 @@ def test_candidate_selection_proximity():
 
     res = reconcile(pr_invoices, g2b_raw)
     s = res["summary"]
-    assert s["exact_matched_count"] == 1
-    matched_entry = res["details"]["exact_matched"][0]
+    assert s["exact_matched_count"] == 0
+    matched_entry = res["details"]["review_required"][0]
     assert matched_entry["gstr2b_invoice"]["txval"] == 50000.0
     assert matched_entry["tax_diff"] == 0.0

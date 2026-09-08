@@ -59,6 +59,8 @@ def bridge_gstr1_and_2b_to_3b(
     opening_cash_ledger: dict[str, float] | None = None
 ) -> dict[str, Any]:
     """Synthesizes complete GSTR-3B input from GSTR-1 and GSTR-2B reconciliation."""
+    from scripts.workflow import require_return
+    require_return(gstr1_data)
     g1_res = compute_gstr1_tables(gstr1_data)
     gstin = g1_res["gstin"]
     ret_period = g1_res["fp"]
@@ -78,6 +80,8 @@ def bridge_gstr1_and_2b_to_3b(
 
     # B2B & SEZ
     for inv in g1_res["table_4_b2b"]:
+        if inv.get("rchrg") == "Y":
+            continue
         inv_typ = inv.get("inv_typ", "R")
         is_sez = inv_typ in ["SEZWP", "SEZWOP"]
         for itm in inv.get("items", []):
@@ -131,9 +135,16 @@ def bridge_gstr1_and_2b_to_3b(
     cdnr_adj_samt = 0.0
     cdnr_adj_csamt = 0.0
     for note in g1_res.get("table_9_cdnr", []):
+        if note.get("rchrg") == "Y":
+            continue
         ntty = note.get("ntty", "C")
         sign = -1.0 if ntty == "C" else 1.0
         for itm in note.get("items", []):
+            if note.get("exp_typ") or note.get("inv_typ") in ("SEZWP", "SEZWOP"):
+                zero_txval += sign * safe_float(itm.get("txval", 0.0))
+                zero_iamt += sign * safe_float(itm.get("iamt", 0.0))
+                zero_csamt += sign * safe_float(itm.get("csamt", 0.0))
+                continue
             cdnr_adj_txval += sign * safe_float(itm.get("txval", 0.0))
             cdnr_adj_iamt += sign * safe_float(itm.get("iamt", 0.0))
             cdnr_adj_camt += sign * safe_float(itm.get("camt", 0.0))
@@ -147,13 +158,13 @@ def bridge_gstr1_and_2b_to_3b(
     taxable_csamt += cdnr_adj_csamt
 
     # Advances: Table 11A received increases liability, 11B adjusted decreases
-    for adv in g1_res.get("table_11_advances", {}).get("received", []):
+    for adv in [item for row in g1_res.get("table_11_advances", {}).get("received", []) for item in row.get("items", [row])]:
         taxable_txval += safe_float(adv.get("txval", 0.0))
         taxable_iamt += safe_float(adv.get("iamt", 0.0))
         taxable_camt += safe_float(adv.get("camt", 0.0))
         taxable_samt += safe_float(adv.get("samt", 0.0))
         taxable_csamt += safe_float(adv.get("csamt", 0.0))
-    for adj in g1_res.get("table_11_advances", {}).get("adjusted", []):
+    for adj in [item for row in g1_res.get("table_11_advances", {}).get("adjusted", []) for item in row.get("items", [row])]:
         taxable_txval -= safe_float(adj.get("txval", 0.0))
         taxable_iamt -= safe_float(adj.get("iamt", 0.0))
         taxable_camt -= safe_float(adj.get("camt", 0.0))
@@ -191,10 +202,15 @@ def bridge_gstr1_and_2b_to_3b(
 
     # --- Table 4 ITC (from Reconciliation Result) ---
     t4_auto = {}
+    if recon_data and recon_data.get("classification_performed") is False:
+        raise ValueError("Exploratory fast matching cannot populate a return; run standard reconciliation")
     if recon_data and "gstr3b_table_4_auto_population" in recon_data:
         t4_auto = recon_data["gstr3b_table_4_auto_population"]
 
     t4_rcm = t4_auto.get("table_4_a_3_rcm_inward", {"iamt": 0.0, "camt": 0.0, "samt": 0.0, "csamt": 0.0, "txval": 0.0})
+    rcm_liability = (recon_data or {}).get("rcm_liability", t4_rcm)
+    if not isinstance(rcm_liability, dict):
+        raise ValueError("RCM liability must be an object")
     t4_impg = t4_auto.get("table_4_a_1_import_goods", {"iamt": 0.0, "csamt": 0.0})
     t4_isd = t4_auto.get("table_4_a_4_isd", {"iamt": 0.0, "camt": 0.0, "samt": 0.0, "csamt": 0.0})
 
@@ -249,11 +265,11 @@ def bridge_gstr1_and_2b_to_3b(
                 "txval": round_cur(nil_txval)
             },
             "rcm_inward": {
-                "txval": round_cur(t4_rcm.get("txval", 0.0)),
-                "iamt": round_cur(t4_rcm.get("iamt", 0.0)),
-                "camt": round_cur(t4_rcm.get("camt", 0.0)),
-                "samt": round_cur(t4_rcm.get("samt", 0.0)),
-                "csamt": round_cur(t4_rcm.get("csamt", 0.0))
+                "txval": round_cur(rcm_liability.get("txval", 0.0)),
+                "iamt": round_cur(rcm_liability.get("iamt", 0.0)),
+                "camt": round_cur(rcm_liability.get("camt", 0.0)),
+                "samt": round_cur(rcm_liability.get("samt", 0.0)),
+                "csamt": round_cur(rcm_liability.get("csamt", 0.0))
             },
             "non_gst": {
                 "txval": round_cur(nongst_txval)
@@ -305,7 +321,7 @@ def populate_statutory_dues(gstr3b_input: dict[str, Any]) -> dict[str, Any]:
         outward = gstr3b_input.get("outward_supplies", {})
         total_outward_tax = sum(
             float(outward.get(section, {}).get(head, 0.0))
-            for section in ("taxable", "zero_rated")
+            for section in ("taxable", "zero_rated", "rcm_inward")
             for head in ("iamt", "camt", "samt", "csamt")
         )
         lf = compute_statutory_late_fee(
@@ -351,8 +367,8 @@ def check_drc_mismatch_risks(gstr1_summary: dict[str, Any], gstr3b_data: dict[st
     g3b_claimed_itc = max(0.0, tot_avail - tot_rev)
 
     drc01c_diff = max(0.0, g3b_claimed_itc - gstr2b_total_itc)
-    drc01c_pct = (drc01c_diff / gstr2b_total_itc * 100.0) if gstr2b_total_itc > 0 else 0.0
-    drc01c_risk = (drc01c_diff > DRC_01C_AMT and drc01c_pct > DRC_01C_PCT) if drc01c_diff > 0 else False
+    drc01c_pct = (drc01c_diff / gstr2b_total_itc * 100.0) if gstr2b_total_itc > 0 else None
+    drc01c_risk = drc01c_diff > 0 and (gstr2b_total_itc <= 0 or (drc01c_diff > DRC_01C_AMT and drc01c_pct is not None and drc01c_pct > DRC_01C_PCT))
 
     return {
         "drc_01b_liability_mismatch": {
@@ -361,15 +377,15 @@ def check_drc_mismatch_risks(gstr1_summary: dict[str, Any], gstr3b_data: dict[st
             "variance": round_cur(drc01b_diff),
             "variance_percentage": round_cur(drc01b_pct),
             "risk_flag": drc01b_risk,
-            "warning": "HIGH RISK: DRC-01B notice will be triggered if variance exceeds 20% AND ₹25 Lakh." if drc01b_risk else "SAFE: Liability matches within safe thresholds."
+            "warning": "REVIEW: Configured liability variance threshold exceeded." if drc01b_risk else "Internal comparison only; verify independent portal liability. No notice prediction."
         },
         "drc_01c_itc_mismatch": {
             "gstr2b_available_itc": round_cur(gstr2b_total_itc),
             "gstr3b_claimed_itc": round_cur(g3b_claimed_itc),
             "excess_claimed": round_cur(drc01c_diff),
-            "excess_percentage": round_cur(drc01c_pct),
+            "excess_percentage": round_cur(drc01c_pct) if drc01c_pct is not None else None,
             "risk_flag": drc01c_risk,
-            "warning": "HIGH RISK: DRC-01C notice will be triggered if ITC claimed exceeds GSTR-2B by >10% AND ₹1 Lakh." if drc01c_risk else "SAFE: ITC claimed matches GSTR-2B."
+            "warning": "REVIEW: ITC variance or zero baseline requires investigation." if drc01c_risk else "Internal comparison only; verify independent portal ITC. No notice prediction."
         }
     }
 

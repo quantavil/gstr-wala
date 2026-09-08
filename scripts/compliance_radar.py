@@ -249,6 +249,7 @@ def apply_compliance_patch(patch_file: str) -> bool:
         print("\n[ALERT] Verification gate FAILED! New statutory rule broke invariant tests.")
         print("Rolling back rules_manifest.json to previous stable state...")
         save_rules_manifest(backup_manifest)
+        reload_manifest()
         print("[ROLLBACK COMPLETE] Codebase preserved in safe, verified state.")
         return False
 

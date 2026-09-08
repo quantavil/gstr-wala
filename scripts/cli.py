@@ -12,7 +12,6 @@ Usage:
 import json
 import os
 import sys
-from typing import Any
 
 # Ensure root directory is on sys.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -42,6 +41,7 @@ from scripts.reconcile_fast import reconcile_polars_rapidfuzz
 from scripts.reconcile_gstr2b import flatten_gstr2b, reconcile
 from scripts.utils import safe_float
 from scripts.validate_gst_input import validate_gstr1_input, validate_gstr3b_input
+from scripts.workflow import atomic_output, purchase_records, validate_2b, validate_tree, write_review_manifest
 
 app = typer.Typer(
     name="gstr-wala",
@@ -54,28 +54,8 @@ console = Console()
 _TURNOVER_SLABS = ("upto_1.5cr", "1.5cr_to_5cr", "above_5cr")
 
 
-def _coerce_purchase_list(pr_data: Any) -> list[Any] | None:
-    """Coerces purchase register JSON into a list without AttributeError traceback.
-
-    Returns None when a dict-shaped register has no recognized 'purchases'/'invoices'
-    array (caller should warn); returns [] for legitimately empty registers.
-    """
-    if isinstance(pr_data, dict):
-        raw = pr_data.get("purchases")
-        if raw is None:
-            raw = pr_data.get("invoices")
-        if raw is None:
-            return None
-        if not isinstance(raw, list):
-            return None
-        return [r for r in raw if isinstance(r, dict)]
-    elif isinstance(pr_data, list):
-        return [r for r in pr_data if isinstance(r, dict)]
-    else:
-        return None
-
-
 @app.command()
+@atomic_output
 def pipeline(
     sales: str = typer.Option(..., "--sales", "-s", help="Path to Sales Register JSON"),
     purchases: str = typer.Option(..., "--purchases", "-p", help="Path to Purchase Register JSON"),
@@ -85,14 +65,15 @@ def pipeline(
     due_date: str = typer.Option(None, "--due-date", help="GSTR-3B due date DD-MM-YYYY; defaults to 20th of next month"),
     filing_date: str = typer.Option(None, "--filing-date", help="Actual filing date DD-MM-YYYY; defaults to due date"),
     turnover_slab: str = typer.Option("upto_1.5cr", "--turnover-slab", help="Turnover slab for late fee caps (upto_1.5cr|1.5cr_to_5cr|above_5cr)"),
+    context: str = typer.Option(None, "--context", help="JSON with verified opening_credit_ledger and opening_cash_ledger"),
 ) -> None:
     """Executes the complete deterministic end-to-end GST return pipeline."""
     if turnover_slab not in _TURNOVER_SLABS:
         console.print(f"[bold red]Invalid --turnover-slab '{turnover_slab}'. Allowed: {', '.join(_TURNOVER_SLABS)}[/bold red]")
         raise typer.Exit(1)
     console.print(Panel.fit(
-        "[bold green]gstr-wala[/bold green] [cyan]• Indian GST Return Filing Pipeline[/cyan]\n"
-        "[dim]Deterministic Python Engines • Rule 88A Optimization • Zero External Data Leaks[/dim]",
+        "[bold green]gstr-wala[/bold green] [cyan]• Indian GST Draft Preparation Pipeline[/cyan]\n"
+        "[dim]Local computation • Rule 88A set-off • CA review required[/dim]",
         border_style="green"
     ))
 
@@ -102,6 +83,7 @@ def pipeline(
     console.print("\n[bold yellow]Step 1/6:[/bold yellow] Ingesting and Validating Sales Register...")
     with open(sales, encoding="utf-8") as f:
         g1_data = json.load(f)
+    validate_tree(g1_data)
     v1 = validate_gstr1_input(g1_data)
     if not v1.is_valid:
         console.print("[bold red]Validation Failed:[/bold red]")
@@ -117,11 +99,9 @@ def pipeline(
     with open(gstr2b, encoding="utf-8") as f:
         g2b_data = json.load(f)
 
-    pr_list = _coerce_purchase_list(pr_data)
-    if pr_list is None:
-        console.print("[yellow]![/yellow] Purchase register JSON has no 'purchases'/'invoices' array — treating as 0 invoices.")
-        pr_list = []
-    recon_res = reconcile(pr_list, g2b_data)
+    pr_list = purchase_records(pr_data)
+    validate_2b(g2b_data, g1_data["gstin"], g1_data["fp"])
+    recon_res = reconcile(pr_list, g2b_data, _16_4_cutoff=filing_date)
     recon_out = os.path.join(output_dir, "reconciliation.json")
     with open(recon_out, "w", encoding="utf-8") as f:
         json.dump(recon_res, f, indent=2)
@@ -136,11 +116,25 @@ def pipeline(
     g1_out = os.path.join(output_dir, "gstr1_portal.json")
     with open(g1_out, "w", encoding="utf-8") as f:
         json.dump(g1_portal, f, indent=2)
-    console.print(f"  [green]✓[/green] Written: [cyan]{g1_out}[/cyan]")
+    console.print("  [green]✓[/green] Staged: [cyan]gstr1_portal.json[/cyan]")
 
     # 4. Bridge to GSTR-3B & DRC Check
     console.print("\n[bold yellow]Step 4/6:[/bold yellow] Auto-Populating GSTR-3B & Scanning DRC-01B/C Risks...")
-    g3b_input = bridge_gstr1_and_2b_to_3b(g1_data, recon_res, due_date=due_date, filing_date=filing_date, turnover_slab=turnover_slab)
+    ledger_context = {}
+    if context:
+        with open(context, encoding="utf-8") as stream:
+            ledger_context = json.load(stream)
+        if not isinstance(ledger_context, dict) or set(ledger_context) - {"opening_credit_ledger", "opening_cash_ledger"}:
+            raise ValueError("Context supports only opening_credit_ledger and opening_cash_ledger")
+        validate_tree(ledger_context)
+        for ledger in ledger_context.values():
+            if not isinstance(ledger, dict) or set(ledger) != {"iamt", "camt", "samt", "csamt"}:
+                raise ValueError("Each ledger must explicitly supply iamt, camt, samt and csamt")
+    g3b_input = bridge_gstr1_and_2b_to_3b(g1_data, recon_res, due_date=due_date, filing_date=filing_date, turnover_slab=turnover_slab,
+        opening_credit_ledger=ledger_context.get("opening_credit_ledger"), opening_cash_ledger=ledger_context.get("opening_cash_ledger"))
+    v3 = validate_gstr3b_input(g3b_input)
+    if not v3.is_valid:
+        raise ValueError("GSTR-3B validation failed: " + "; ".join(v3.errors))
     g3b_in_path = os.path.join(output_dir, "gstr3b_input.json")
     with open(g3b_in_path, "w", encoding="utf-8") as f:
         json.dump(g3b_input, f, indent=2)
@@ -161,7 +155,7 @@ def pipeline(
     g3b_out = os.path.join(output_dir, "gstr3b_portal.json")
     with open(g3b_out, "w", encoding="utf-8") as f:
         json.dump(g3b_portal, f, indent=2)
-    console.print(f"  [green]✓[/green] Written: [cyan]{g3b_out}[/cyan]")
+    console.print("  [green]✓[/green] Staged: [cyan]gstr3b_portal.json[/cyan]")
 
     # 6. CA Filing Packs & Schema Validation & PDF
     console.print("\n[bold yellow]Step 6/6:[/bold yellow] Validating Portal Schemas & Generating CA Filing Packs...")
@@ -176,11 +170,22 @@ def pipeline(
         for err in errs_g3b:
             console.print(f"  [red]✗ GSTR-3B Schema Error:[/red] {err}")
         raise typer.Exit(1)
-    console.print("  [green]✓[/green] GSTR-1 and GSTR-3B Portal JSONs strictly conform to canonical schemas.")
+    console.print("  [green]✓[/green] Draft JSONs pass repository schemas; official portal acceptance is not verified.")
 
     generate_gstr1_filing_pack(g1_data, os.path.join(output_dir, "gstr1_filing_pack.md"))
     generate_gstr3b_filing_pack(g3b_input, os.path.join(output_dir, "gstr3b_filing_pack.md"))
     generate_reconciliation_report(recon_res, os.path.join(output_dir, "reconciliation_report.md"))
+    context_warnings = list(v1.warnings)
+    context_warnings.append("Verify prior claims, RCM and special schedules; defaults are not evidence of completeness.")
+    if not context or len(ledger_context) < 2:
+        context_warnings.append("Opening ledgers were not fully supplied; omitted balances default to zero.")
+    if not filing_date:
+        context_warnings.append("Filing date was not supplied; on-time filing was assumed for statutory dues.")
+    sources = {"sales": sales, "purchases": purchases, "gstr2b": gstr2b,
+        "rules": os.path.join(os.path.dirname(__file__), "..", "config", "rules_manifest.json")}
+    if context:
+        sources["context"] = context
+    write_review_manifest(output_dir, sources, recon_res, context_warnings)
 
     pdf_ok = False
     if pdf:
@@ -190,20 +195,35 @@ def pipeline(
             console.print("  [yellow]![/yellow] Warning: PDF statement generation failed or skipped; HTML version saved.")
 
     # Rich Summary Table
-    table = Table(title="[bold green]Filing Outputs Generated Successfully[/bold green]", border_style="cyan")
+    table = Table(title="[bold green]Draft outputs generated — CA review required[/bold green]", border_style="cyan")
     table.add_column("Artifact", style="bold")
     table.add_column("Path", style="cyan")
     table.add_column("Action", style="magenta")
 
-    table.add_row("GSTR-1 Portal JSON", g1_out, "Upload to GST Portal Offline Tool")
-    table.add_row("GSTR-3B Portal JSON", g3b_out, "Upload / Verify on GST Portal")
-    table.add_row("GSTR-1 Summary Pack", os.path.join(output_dir, "gstr1_filing_pack.md"), "Client / CA Review")
-    table.add_row("GSTR-3B Summary Pack", os.path.join(output_dir, "gstr3b_filing_pack.md"), "Challan & Offset Review")
-    table.add_row("2B Reconciliation Audit", os.path.join(output_dir, "reconciliation_report.md"), "Vendor Follow-up")
+    table.add_row("GSTR-1 Portal JSON", "gstr1_portal.json", "Review, then validate in official tooling")
+    table.add_row("GSTR-3B Portal JSON", "gstr3b_portal.json", "Review against portal statement")
+    table.add_row("GSTR-1 Summary Pack", "gstr1_filing_pack.md", "Client / CA Review")
+    table.add_row("GSTR-3B Summary Pack", "gstr3b_filing_pack.md", "Challan & Offset Review")
+    table.add_row("2B Reconciliation Audit", "reconciliation_report.md", "Vendor Follow-up")
+    table.add_row("Consolidated CA review", "ca_review.md", "Review all issue IDs once")
     if pdf and pdf_ok:
-        table.add_row("PDF Statement", os.path.join(output_dir, "gstr3b_statement.pdf"), "Printable Tax Audit Record")
+        table.add_row("PDF Statement", "gstr3b_statement.pdf", "Printable computation draft")
 
     console.print("\n", table)
+
+
+@app.command(name="approve-run")
+def approve_run_command(
+    directory: str = typer.Argument(..., help="Prepared run directory"),
+    reviewer: str = typer.Option(..., "--reviewer", help="Reviewer's name"),
+    decisions: str = typer.Option(..., "--decisions", help="JSON mapping each review issue ID to a decision note"),
+) -> None:
+    """Record one local review of unchanged draft files; does not file a return."""
+    from scripts.workflow import approve_run
+    with open(decisions, encoding="utf-8") as stream:
+        notes = json.load(stream)
+    approve_run(directory, reviewer, notes)
+    console.print("Reviewed draft recorded. Filing and professional certification remain separate acts.")
 
 
 @app.command()
@@ -211,6 +231,7 @@ def validate(file_path: str = typer.Argument(..., help="Path to GSTR-1 or GSTR-3
     """Strictly validates a sales, purchase, or return input JSON."""
     with open(file_path, encoding="utf-8") as f:
         data = json.load(f)
+    validate_tree(data)
 
     try:
         ret_type = detect_return_type(data)
@@ -225,11 +246,20 @@ def validate(file_path: str = typer.Argument(..., help="Path to GSTR-1 or GSTR-3
 
     if res.is_valid:
         console.print("[bold green]✓ Validation PASSED: All statutory format and checksum checks hold.[/bold green]")
+        for warning in res.warnings:
+            console.print(f"[yellow]Review:[/yellow] {warning}")
     else:
         console.print(f"[bold red]✗ Validation FAILED with {len(res.errors)} error(s):[/bold red]")
         for err in res.errors:
             console.print(f"  [red]•[/red] {err}")
         raise typer.Exit(1)
+
+
+@app.command(name="verify-run")
+def verify_run_command(directory: str = typer.Argument(..., help="Prepared run directory")) -> None:
+    """Verify output fingerprints and any recorded local review."""
+    from scripts.workflow import verify_run
+    console.print(verify_run(directory))
 
 
 @app.command(name="reconcile")
@@ -246,10 +276,8 @@ def reconcile_command(
     with open(gstr2b, encoding="utf-8") as f:
         g2b = json.load(f)
 
-    pr_list = _coerce_purchase_list(pr)
-    if pr_list is None:
-        console.print("[yellow]![/yellow] Purchase register JSON has no 'purchases'/'invoices' array — treating as 0 invoices.")
-        pr_list = []
+    pr_list = purchase_records(pr)
+    validate_2b(g2b)
 
     if fast:
         g2b_flat = flatten_gstr2b(g2b)

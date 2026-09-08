@@ -98,7 +98,9 @@ def _parse_purchase_rows(rows: list[dict[str, Any]], source_label: str = "purcha
         try:
             unpaid_days = int(float(row_norm.get("unpaid_days", "") or 0))
         except Exception:
-            unpaid_days = 0
+            raise ValueError(f"Row {row_idx}: invalid unpaid_days") from None
+        if unpaid_days < 0:
+            raise ValueError(f"Row {row_idx}: unpaid_days cannot be negative")
         hsn_sc = ""
         for _hsn_alias in ("hsn_sc", "hsn_code", "hsn", "sac"):
             _hsn_val = row_norm.get(_hsn_alias)
@@ -131,6 +133,19 @@ def _parse_purchase_rows(rows: list[dict[str, Any]], source_label: str = "purcha
             record["hsn_sc"] = hsn_sc
         if unpaid_value is not None:
             record["unpaid_value"] = round_cur(unpaid_value)
+        if not (row_norm.get("is_blocked_17_5") or row_norm.get("blocked")):
+            record.pop("is_blocked_17_5")
+        for field in ("rcm_paid", "previously_claimed"):
+            if row_norm.get(field):
+                raw = row_norm[field].lower()
+                if raw not in ("true", "false", "yes", "no", "y", "n", "1", "0"):
+                    raise ValueError(f"Row {row_idx}: invalid {field}")
+                record[field] = raw in ("true", "yes", "y", "1")
+        for field in ("rchrg", "port_code", "document_type", "ntty"):
+            if row_norm.get(field):
+                record[field] = row_norm[field].upper()
+        if row_norm.get("annual_return_filed_on"):
+            record["annual_return_filed_on"] = normalize_date_str(row_norm["annual_return_filed_on"])
         purchases.append(record)
     return purchases
 
@@ -165,12 +180,13 @@ def main():
                 loaded = json.load(f)
             # Accept either a bare list or an already-wrapped document; never
             # double-wrap into {"purchases": {"purchases": [...]}}.
-            purchases = loaded.get("purchases", []) if isinstance(loaded, dict) else loaded
-            if not isinstance(purchases, list):
+            loaded_rows = loaded.get("purchases", loaded.get("invoices")) if isinstance(loaded, dict) else loaded
+            if not isinstance(loaded_rows, list):
                 sys.exit(
                     f"Error: '{input_file}' must contain a list of purchase "
                     f"invoices or an object with a 'purchases' array."
                 )
+            purchases = loaded_rows
         else:
             sys.exit("Error: Currently .csv, .xlsx, .xls, .xlsb and .json files are supported.")
     except ValueError as exc:

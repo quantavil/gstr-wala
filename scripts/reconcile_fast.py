@@ -154,14 +154,24 @@ def reconcile_polars_rapidfuzz(
 
     matched_book_ids: set[Any] = set()
     matched_g2b_ids: set[Any] = set()
+    value_mismatches: list[dict[str, Any]] = []
+    value_mismatch_book_ids: set[Any] = set()
     if exact_joined.height > 0:
         for row in exact_joined.sort(["book_id", "g2b_id"]).iter_rows(named=True):
             if row["g2b_id"] not in matched_g2b_ids and row["book_id"] not in matched_book_ids:
+                if row["book_id"] in value_mismatch_book_ids:
+                    continue
+                if any(abs(row[h] - row[f"{h}_2b"]) > 1 for h in ("txval", "iamt", "camt", "samt", "csamt")):
+                    value_mismatch_book_ids.add(row["book_id"])
+                    value_mismatches.append({"books_invoice": norm_books[row["book_id"]],
+                        "best_candidate_2b": norm_2b[row["g2b_id"]],
+                        "reason": "Exact identity has different taxable value or tax heads"})
+                    continue
                 matched_book_ids.add(row["book_id"])
                 matched_g2b_ids.add(row["g2b_id"])
 
     # Filter unmatched for RapidFuzz fuzzy candidate search
-    unmatched_books = [b for b in norm_books if b["book_id"] not in matched_book_ids]
+    unmatched_books = [b for b in norm_books if b["book_id"] not in matched_book_ids and b["book_id"] not in value_mismatch_book_ids]
     unmatched_2b = [r for r in norm_2b if r["g2b_id"] not in matched_g2b_ids]
 
     # Build lookup of 2B normalized invoice numbers per GSTIN
@@ -173,8 +183,6 @@ def reconcile_polars_rapidfuzz(
         g2b_by_ctin[c_str].append(r)
 
     fuzzy_matched: list[dict[str, Any]] = []
-    value_mismatches: list[dict[str, Any]] = []
-    value_mismatch_book_ids: set[Any] = set()
 
     for b in unmatched_books:
         c_str = str(b["ctin"])

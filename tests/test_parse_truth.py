@@ -242,6 +242,7 @@ class TestSalesRegisterTruthfulness:
     def test_short_row_values_are_empty_not_none_strings(self):
         rows = [{
             "invoice_number": "INV-9",
+            "pos": "27",  # Explicit POS: an unregistered customer's location cannot be guessed.
             "invoice_date": "05-04-2026",
             "taxable_value": "1000",
             "gst_rate": "0",
@@ -278,9 +279,9 @@ class TestSalesRegisterTruthfulness:
         # First occurrence has a blank GSTIN; the conflict must fire once a
         # later row supplies one and a third row contradicts it.
         rows = _sales_rows(
-            ["INV-BLANKCTIN", "05-04-2026", "", "27", "10000", "18", "1800", "", ""],
+            ["INV-BLANKCTIN", "05-04-2026", "", "29", "10000", "18", "1800", "", ""],
             ["INV-BLANKCTIN", "05-04-2026", "29AAAAA0000A1ZY", "29", "20000", "18", "3600", "", ""],
-            ["INV-BLANKCTIN", "05-04-2026", "27BBBBB1111B1ZN", "27", "30000", "18", "", "5400", "5400"],
+            ["INV-BLANKCTIN", "05-04-2026", "27BBBBB1111B1ZN", "29", "30000", "18", "", "5400", "5400"],
         )
         with pytest.raises(ValueError) as exc:
             parse_rows_sales(rows, GSTIN, FP)
@@ -290,7 +291,7 @@ class TestSalesRegisterTruthfulness:
 
     def test_blank_ctin_backfilled_consistently_still_merges(self):
         rows = _sales_rows(
-            ["INV-FILL", "05-04-2026", "", "27", "10000", "18", "1800", "", ""],
+            ["INV-FILL", "05-04-2026", "", "29", "10000", "18", "1800", "", ""],
             ["INV-FILL", "05-04-2026", "29AAAAA0000A1ZY", "29", "20000", "18", "3600", "", ""],
         )
         result = parse_rows_sales(rows, GSTIN, FP)

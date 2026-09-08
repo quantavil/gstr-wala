@@ -35,6 +35,9 @@ GSTR3B_PORTAL_VERSION = "gstr-wala-gstr3b-1.0"
 
 def generate_portal_gstr3b(input_data: dict[str, Any], portal_version: str | None = None) -> dict[str, Any]:
     """Transforms canonical GSTR-3B input JSON into offline-tool-shaped portal JSON."""
+    from scripts.workflow import require_return
+
+    require_return(input_data)
     gstin = input_data.get("gstin", "")
     ret_period = input_data.get("ret_period", "")
 

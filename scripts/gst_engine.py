@@ -24,7 +24,7 @@ from typing import Any
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from scripts.constants import (
-    B2CL_THRESHOLD,
+    b2cl_threshold_for_period,
     detect_return_type,
     get_interest_rate_50_1,
     get_late_fee_caps,
@@ -115,7 +115,7 @@ def compute_gstr1_tables(data: dict[str, Any]) -> dict[str, Any]:
         else:
             # B2C (Unregistered recipient)
             # Table 5 B2CL applies to inter-state B2C supplies > B2CL_THRESHOLD (₹1,00,000)
-            if is_interstate and effective_inv_val > B2CL_THRESHOLD:
+            if is_interstate and effective_inv_val > b2cl_threshold_for_period(fp):
                 b2cl_invoices.append(inv_view)
             else:
                 # Table 7 B2CS — aggregate by (pos, rate, etin)

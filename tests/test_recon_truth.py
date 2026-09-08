@@ -23,7 +23,7 @@ class TestAmendedDocuments:
     def test_b2ba_supersedes_b2b_without_double_counting(self):
         """B2BA amendment supersedes original B2B for the period."""
         pr_invoices = [
-            {"ctin": "27AAAAA0000A1Z2", "inum": "INV-100", "txval": 12000.0, "iamt": 2160.0}
+            {"ctin": "27AAAAA0000A1Z2", "inum": "INV-100", "idt": "10-04-2026", "txval": 12000.0, "iamt": 2160.0}
         ]
         g2b_raw = {
             "data": {
@@ -165,7 +165,7 @@ class TestRcmRouting:
     def test_rcm_with_itcavl_n_routes_to_4a3_not_4d2(self):
         """GSTR-2B inward RCM (rchrg='Y') with itcavl='N' routes to 4(A)(3), NOT 4(D)(2)."""
         pr_invoices = [
-            {"ctin": "27AAAAA0000A1Z2", "inum": "RCM-101", "txval": 50000.0, "iamt": 9000.0}
+            {"ctin": "27AAAAA0000A1Z2", "inum": "RCM-101", "idt": "10-04-2026", "txval": 50000.0, "iamt": 9000.0, "rcm_paid": True}
         ]
         g2b_raw = {
             "data": {
@@ -205,7 +205,7 @@ class TestRcmRouting:
     def test_non_rcm_with_itcavl_n_routes_to_4d2(self):
         """Non-RCM inward invoice with itcavl='N' routes to Table 4(D)(2) ineligible."""
         pr_invoices = [
-            {"ctin": "27AAAAA0000A1Z2", "inum": "INV-REG-101", "txval": 50000.0, "iamt": 9000.0}
+            {"ctin": "27AAAAA0000A1Z2", "inum": "INV-REG-101", "idt": "10-04-2026", "txval": 50000.0, "iamt": 9000.0}
         ]
         g2b_raw = {
             "data": {
@@ -240,6 +240,8 @@ class TestRcmRouting:
             {
                 "ctin": "27AAAAA0000A1Z2",
                 "inum": "RCM-MV-1",
+                "idt": "10-04-2026",
+                "rcm_paid": True,
                 "txval": 50000.0,
                 "iamt": 9000.0,
                 "is_blocked_17_5": True,
@@ -282,6 +284,7 @@ class TestRule37ProportionalReversal:
             {
                 "ctin": "27AAAAA0000A1Z2",
                 "inum": "PUR-R37-1",
+                "idt": "01-04-2026",
                 "val": 118000.0,
                 "txval": 100000.0,
                 "iamt": 18000.0,
@@ -322,6 +325,7 @@ class TestRule37ProportionalReversal:
             {
                 "ctin": "27AAAAA0000A1Z2",
                 "inum": "PUR-R37-2",
+                "idt": "01-04-2026",
                 "val": 118000.0,
                 "txval": 100000.0,
                 "iamt": 18000.0,
@@ -360,6 +364,7 @@ class TestRule37ProportionalReversal:
             {
                 "ctin": "27AAAAA0000A1Z2",
                 "inum": "PUR-R37-3",
+                "idt": "01-04-2026",
                 "val": 118000.0,
                 "txval": 100000.0,
                 "iamt": 18000.0,
@@ -398,6 +403,7 @@ class TestRule37ProportionalReversal:
             {
                 "ctin": "27AAAAA0000A1Z2",
                 "inum": "PUR-R37-4",
+                "idt": "01-04-2026",
                 "txval": 100000.0,
                 "iamt": 18000.0,
                 "unpaid_days": 200,
@@ -434,11 +440,12 @@ class TestRule37ProportionalReversal:
 
 class TestSingleAxisTolerance:
     def test_single_axis_tolerance_with_large_txval_diff(self):
-        """Tax difference <= ₹1 qualifies as TOLERANCE_MATCH even with large txval diff."""
+        """A small tax difference cannot hide a material taxable-value mismatch."""
         pr_invoices = [
             {
                 "ctin": "27AAAAA0000A1Z2",
                 "inum": "INV-TOL-1",
+                "idt": "10-04-2026",
                 "txval": 100000.0,
                 "iamt": 18000.50,
             }
@@ -463,9 +470,9 @@ class TestSingleAxisTolerance:
         }
 
         res = reconcile(pr_invoices, g2b_raw)
-        assert res["summary"]["tolerance_matched_count"] == 1
-        assert res["summary"]["value_mismatch_count"] == 0
-        entry = res["details"]["tolerance_matched"][0]
+        assert res["summary"]["tolerance_matched_count"] == 0
+        assert res["summary"]["value_mismatch_count"] == 1
+        entry = res["details"]["value_mismatches"][0]
         assert entry["tax_diff"] == 0.50
         assert entry["txval_diff"] == 50000.0
 
@@ -501,8 +508,9 @@ class TestImpgsezLabelPreservation:
         assert records[0]["ctin"] == "ICEGATE"
 
         res = reconcile([], g2b_raw)
-        assert res["summary"]["impg_count"] == 1
-        assert res["gstr3b_table_4_auto_population"]["table_4_a_1_import_goods"]["iamt"] == 36000.0
+        assert res["summary"]["impg_count"] == 0
+        assert res["summary"]["review_required_count"] == 1
+        assert res["gstr3b_table_4_auto_population"]["table_4_a_1_import_goods"]["iamt"] == 0.0
 
 
 # --- 6. Section 16(4) Time Limit Gate ---------------------------------------
@@ -692,11 +700,10 @@ class TestOfficialGstnPortalShape:
         assert s["value_mismatch_count"] == 0
 
         t4 = res["gstr3b_table_4_auto_population"]
-        assert t4["table_4_a_1_import_goods"]["iamt"] == 54000.0  # 36000 (impg) + 18000 (impgsez)
-        assert t4["table_4_a_4_isd"]["iamt"] == 5000.0
+        assert t4["table_4_a_1_import_goods"]["iamt"] == 0.0  # unmatched imports require books evidence
+        assert t4["table_4_a_4_isd"]["iamt"] == 0.0  # unmatched ISD requires review
         assert t4["table_4_a_5_all_other_itc"]["iamt"] == 18000.0
         assert t4["table_4_a_5_all_other_itc"]["camt"] == 3000.0
         assert t4["table_4_a_5_all_other_itc"]["samt"] == 3000.0
-        assert t4["table_4_c_net_itc"]["iamt"] == 77000.0  # 18000 + 54000 + 5000
-        assert t4["table_4_c_net_itc"]["total"] == 83000.0  # 77000 + 3000 + 3000
-
+        assert t4["table_4_c_net_itc"]["iamt"] == 18000.0
+        assert t4["table_4_c_net_itc"]["total"] == 24000.0

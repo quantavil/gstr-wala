@@ -8,7 +8,6 @@ Note:
 import json
 import os
 import re
-import warnings
 from typing import Any
 
 _MANIFEST_PATH = os.path.join(os.path.dirname(__file__), "..", "config", "rules_manifest.json")
@@ -19,13 +18,7 @@ def _load_manifest() -> dict[str, Any]:
         with open(_MANIFEST_PATH, encoding="utf-8") as f:
             return json.load(f)
     except (OSError, json.JSONDecodeError, ValueError) as e:
-        warnings.warn(
-            f"Could not load statutory rules manifest from {_MANIFEST_PATH}: {e}. "
-            "Falling back to embedded statutory defaults.",
-            UserWarning,
-            stacklevel=2,
-        )
-        return {}
+        raise ValueError(f"Cannot load rules manifest {_MANIFEST_PATH}: {e}. Restore a reviewed rules file before computing.") from e
 
 
 _m = _load_manifest()
@@ -54,7 +47,8 @@ def reload_manifest() -> None:
     _m = _load_manifest()
     _stat = _m.get("statutory_rules", {})
     B2CL_THRESHOLD = float(_stat.get("b2cl_threshold", {}).get("value", 100000.0))
-    VALID_RATES = set(_stat.get("statutory_gst_rates", [0.0, 0.1, 0.25, 1.5, 3.0, 5.0, 12.0, 18.0, 28.0]))
+    VALID_RATES.clear()
+    VALID_RATES.update(_stat.get("statutory_gst_rates", [0.0, 0.1, 0.25, 1.5, 3.0, 5.0, 12.0, 18.0, 28.0, 40.0]))
     DRC_01B_PCT = float(
         _stat.get("drc_surveillance_thresholds", {}).get("drc_01b_rule_88c", {}).get("percentage_threshold", 20.0)
     )
@@ -70,6 +64,23 @@ def reload_manifest() -> None:
 
 
 BLOCKED_HSNS = {"8702", "8703", "8704", "9963", "9965", "9966", "9967"}
+
+
+def rates_for_date(invoice_date: str) -> set[float]:
+    """Format-level allowed rates, not an HSN rate determination."""
+    from datetime import datetime
+
+    rates = set(VALID_RATES)
+    if datetime.strptime(invoice_date, "%d-%m-%Y").date().isoformat() < "2025-09-22":
+        rates.discard(40.0)
+    return rates
+
+
+def b2cl_threshold_for_period(period: str) -> float:
+    """Use the historical threshold before the August 2024 return period."""
+    if not PERIOD_REGEX.match(period):
+        raise ValueError("A valid MMYYYY return period is required")
+    return 250000.0 if (int(period[2:]), int(period[:2])) < (2024, 8) else B2CL_THRESHOLD
 
 # Valid Indian State / Union Territory codes (01-38, 97)
 # Note: 25 merged into 26 (DNH & DD) in 2020; 28 (Old AP) deprecated to 37.

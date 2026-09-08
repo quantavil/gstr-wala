@@ -81,6 +81,9 @@ class ValidationResult:
 def validate_gstr1_input(data: dict[str, Any]) -> ValidationResult:
     """Validates canonical GSTR-1 input JSON."""
     result = ValidationResult()
+    if not isinstance(data, dict):
+        result.error("Input must be an object")
+        return result
 
     # Top-level required fields
     if "gstin" not in data:
@@ -95,7 +98,7 @@ def validate_gstr1_input(data: dict[str, Any]) -> ValidationResult:
     elif not isinstance(data["fp"], str) or not PERIOD_REGEX.match(data["fp"]):
         result.error(f"Invalid 'fp' format: '{data.get('fp')}'. Expected MMYYYY (e.g., '042026')")
 
-    supplier_state = data.get("gstin", "")[:2]
+    supplier_state = str(data.get("gstin", ""))[:2]
 
     # Invoices validation
     invoices = data.get("invoices", [])
@@ -106,7 +109,12 @@ def validate_gstr1_input(data: dict[str, Any]) -> ValidationResult:
     seen_invoice_numbers = set()
 
     for idx, inv in enumerate(invoices):
+        if not isinstance(inv, dict):
+            result.error(f"Invoice #{idx + 1}: must be an object")
+            continue
         prefix = f"Invoice #{idx + 1}"
+        if inv.get("pos_basis"):
+            result.warn(f"{prefix}: POS review: {inv['pos_basis']}")
         inum = inv.get("inum")
         if not inum or not isinstance(inum, str):
             result.error(f"{prefix}: Missing or invalid 'inum' (Invoice Number)")
@@ -138,7 +146,7 @@ def validate_gstr1_input(data: dict[str, Any]) -> ValidationResult:
         ctin = inv.get("ctin")
         is_b2b = bool(ctin)
         if is_b2b:
-            valid_ctin, err = is_valid_gstin(ctin)
+            valid_ctin, err = is_valid_gstin(str(ctin))
             if not valid_ctin:
                 result.error(f"{prefix}: Invalid recipient GSTIN 'ctin': {err}")
 
@@ -152,6 +160,9 @@ def validate_gstr1_input(data: dict[str, Any]) -> ValidationResult:
         is_interstate = (pos != supplier_state) and (pos != "") and (supplier_state != "")
 
         for item_idx, itm in enumerate(items):
+            if not isinstance(itm, dict):
+                result.error(f"{prefix}: item must be an object")
+                continue
             item_pfx = f"{prefix} Item #{item_idx + 1}"
             import math
 
@@ -176,6 +187,13 @@ def validate_gstr1_input(data: dict[str, Any]) -> ValidationResult:
                 result.error(f"{item_pfx}: tax amounts cannot be negative (iamt={iamt}, camt={camt}, samt={samt}, csamt={csamt})")
             if float(rt) not in VALID_RATES:
                 result.error(f"{item_pfx}: Invalid GST rate '{rt}%'. Allowed rates: {sorted(VALID_RATES)}")
+            if rt == 40.0:
+                from scripts.constants import rates_for_date
+                try:
+                    if rt not in rates_for_date(str(idt)):
+                        result.error(f"{item_pfx}: 40% rate is not supported before 22-09-2025")
+                except (ValueError, TypeError):
+                    pass
 
             # Inter-state vs Intra-state tax allocation check
             if is_interstate:
@@ -207,6 +225,9 @@ def validate_gstr1_input(data: dict[str, Any]) -> ValidationResult:
             calc_inv_val += (txval + iamt + camt + samt + csamt)
 
         inv_val = inv.get("val")
+        if inv_val is not None and (isinstance(inv_val, bool) or not isinstance(inv_val, (int, float))):
+            result.error(f"{prefix}: invoice value must be a number")
+            inv_val = None
         if inv_val is not None and abs(inv_val - calc_inv_val) > 2.0:
             result.warn(f"{prefix}: Total invoice value ₹{inv_val} deviates from sum of items ₹{round(calc_inv_val, 2)}")
 
@@ -222,12 +243,36 @@ def validate_gstr1_input(data: dict[str, Any]) -> ValidationResult:
                 if effective_val <= 0:
                     result.error(f"{prefix}: B2C invoice value must be greater than 0")
 
+    notes = data.get("credit_debit_notes", [])
+    if not isinstance(notes, list):
+        result.error("credit_debit_notes must be an array")
+    else:
+        for note in notes:
+            if not isinstance(note, dict) or note.get("ntty") not in ("C", "D"):
+                result.error("Credit/debit note requires an object with ntty C or D")
+                continue
+            mapped = {**note, "inum": note.get("nt_num"), "idt": note.get("nt_dt")}
+            checked = validate_gstr1_input({"gstin": data.get("gstin"), "fp": data.get("fp"), "invoices": [mapped]})
+            result.errors.extend(checked.errors)
+            result.warnings.extend(checked.warnings)
     return result
 
 
 def validate_gstr3b_input(data: dict[str, Any]) -> ValidationResult:
     """Validates canonical GSTR-3B input JSON."""
     result = ValidationResult()
+    from scripts.workflow import validate_tree
+
+    try:
+        if not isinstance(data, dict):
+            raise ValueError("GSTR-3B must be an object")
+        validate_tree(data)
+        for key in ("outward_supplies", "itc", "eco_supplies", "opening_credit_ledger", "opening_cash_ledger", "interest_details", "late_fee_details"):
+            if key in data and not isinstance(data[key], dict):
+                raise ValueError(f"{key} must be an object")
+    except (ValueError, TypeError) as exc:
+        result.error(str(exc))
+        return result
 
     if "gstin" not in data:
         result.error("Missing required field: 'gstin'")
@@ -244,7 +289,7 @@ def validate_gstr3b_input(data: dict[str, Any]) -> ValidationResult:
     # Dates — calendar validation extra
     for dt_field in ["due_date", "filing_date"]:
         if data.get(dt_field):
-            if not DATE_REGEX.match(data[dt_field]):
+            if not isinstance(data[dt_field], str) or not DATE_REGEX.match(data[dt_field]):
                 result.error(f"Invalid '{dt_field}' date '{data[dt_field]}'. Expected DD-MM-YYYY.")
             else:
                 try:

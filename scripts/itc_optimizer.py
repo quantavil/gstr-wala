@@ -35,6 +35,14 @@ def optimize_setoff(
     late_fee: dict[str, float] | None = None
 ) -> OptimizationResult:
     """Solves the Rule 88A set-off optimization problem."""
+    import math
+
+    for amounts in (liabilities, rcm_liabilities, available_itc, opening_cash or {}, opening_credit or {}, interest or {}, late_fee or {}):
+        for key, value in amounts.items():
+            if isinstance(value, bool) or not isinstance(value, (int, float, str)) or not math.isfinite(float(value)):
+                raise ValueError(f"{key}: set-off requires finite money")
+            if float(value) < 0:
+                raise ValueError(f"{key}: negative ledger/liability requires a reviewed adjustment schedule")
     # Outward liabilities
     l_i = float(liabilities.get("iamt", 0.0))
     l_c = float(liabilities.get("camt", 0.0))
@@ -338,10 +346,10 @@ def optimize_from_input_dict(data: dict[str, Any]) -> OptimizationResult:
     tot_rev_cs = sum(float(rev.get(cat, {}).get("csamt", 0.0)) for cat in rev)
 
     net_itc: TaxAmounts = {
-        "iamt": max(0.0, tot_avail_i - tot_rev_i),
-        "camt": max(0.0, tot_avail_c - tot_rev_c),
-        "samt": max(0.0, tot_avail_s - tot_rev_s),
-        "csamt": max(0.0, tot_avail_cs - tot_rev_cs)
+        "iamt": tot_avail_i - tot_rev_i,
+        "camt": tot_avail_c - tot_rev_c,
+        "samt": tot_avail_s - tot_rev_s,
+        "csamt": tot_avail_cs - tot_rev_cs
     }
 
     return optimize_setoff(

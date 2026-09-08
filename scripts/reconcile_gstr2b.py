@@ -83,7 +83,7 @@ def _is_section_16_4_expired(idt_str: str | None, cutoff_date_str: str | None = 
                 UserWarning,
                 stacklevel=2,
             )
-            eval_date = datetime.now(UTC).date()
+            raise ValueError(f"Invalid Section 16(4) cutoff: {cutoff_date_str!r}") from e
     else:
         eval_date = datetime.now(UTC).date()
 
@@ -400,7 +400,7 @@ def flatten_gstr2b(g2b_data: dict[str, Any]) -> list[dict[str, Any]]:
 
     # 4. Process Import of Goods (impg)
     for imp in data_block.get("impg", []):
-        boe_list = imp.get("boe") or imp.get("boes") or []
+        boe_list = imp.get("boe") or imp.get("boes") or ([imp] if imp.get("boenum") else [])
         for boe in boe_list:
             boenum = str(boe.get("boenum") or boe.get("inum") or boe.get("num") or "").strip()
             boedt = str(boe.get("boedt") or boe.get("dt") or boe.get("idt") or "")
@@ -423,6 +423,7 @@ def flatten_gstr2b(g2b_data: dict[str, Any]) -> list[dict[str, Any]]:
                 "section": "IMPG",
                 "ctin": "ICEGATE",
                 "inum": boenum,
+                "port_code": str(boe.get("port_code") or boe.get("portcd") or imp.get("port_code") or imp.get("portcd") or "").strip().upper(),
                 "norm_inum": norm,
                 "trailing_digits": extract_trailing_digits(norm),
                 "idt": boedt,
@@ -437,7 +438,7 @@ def flatten_gstr2b(g2b_data: dict[str, Any]) -> list[dict[str, Any]]:
 
     # 4b. Process Import from SEZ (impgsez) — preserve distinct IMPGSEZ section label
     for imp in data_block.get("impgsez", []):
-        boe_list = imp.get("boe") or imp.get("boes") or []
+        boe_list = imp.get("boe") or imp.get("boes") or ([imp] if imp.get("boenum") else [])
         for boe in boe_list:
             boenum = str(boe.get("boenum") or boe.get("inum") or boe.get("num") or "").strip()
             boedt = str(boe.get("boedt") or boe.get("dt") or boe.get("idt") or "")
@@ -460,6 +461,7 @@ def flatten_gstr2b(g2b_data: dict[str, Any]) -> list[dict[str, Any]]:
                 "section": "IMPGSEZ",
                 "ctin": "ICEGATE",
                 "inum": boenum,
+                "port_code": str(boe.get("port_code") or boe.get("portcd") or imp.get("port_code") or imp.get("portcd") or "").strip().upper(),
                 "norm_inum": norm,
                 "trailing_digits": extract_trailing_digits(norm),
                 "idt": boedt,
@@ -521,14 +523,16 @@ def _classify_books_invoice(
     csamt = safe_float(pr_inv.get("csamt", 0.0))
     tot_tax = round_cur(iamt + camt + samt + csamt)
 
-    is_blocked = bool(pr_inv.get("is_blocked_17_5", False)) or (
-        str(pr_inv.get("hsn_sc", "")).strip() in BLOCKED_HSNS
-    )
+    is_blocked = pr_inv.get("is_blocked_17_5") is True
     ud = safe_int(pr_inv.get("unpaid_days", 0))
     is_unpaid_180 = ud > 180 or bool(pr_inv.get("rule_37_reversal"))
 
     date_raw = pr_inv.get("idt") or pr_inv.get("date") or pr_inv.get("invoice_date") or ""
     is_16_4_expired = _is_section_16_4_expired(str(date_raw), _16_4_cutoff)
+    if pr_inv.get("annual_return_filed_on"):
+        annual_filed = _parse_dmy_date(normalize_date_str(pr_inv["annual_return_filed_on"]))
+        claim_date = _parse_dmy_date(normalize_date_str(_16_4_cutoff)) if _16_4_cutoff else datetime.now(UTC).date()
+        is_16_4_expired = is_16_4_expired or claim_date >= annual_filed
 
     return is_blocked, is_unpaid_180, is_16_4_expired, tot_tax, txval
 
@@ -566,7 +570,13 @@ def reconcile(
       gstr2b_raw: Raw official GSTR-2B JSON payload from the GST portal.
       _16_4_cutoff: Optional ISO or DD-MM-YYYY evaluation cutoff date for Section 16(4).
     """
+    from scripts.workflow import validate_tree
+
+    validate_tree(purchase_register, "purchases")
+    validate_tree(gstr2b_raw, "gstr2b")
     effective_cutoff = _16_4_cutoff
+    if effective_cutoff:
+        _parse_dmy_date(normalize_date_str(effective_cutoff))
     if not effective_cutoff and isinstance(gstr2b_raw, dict):
         docdata = _resolve_docdata(gstr2b_raw)
         fp = gstr2b_raw.get("fp") or gstr2b_raw.get("data", {}).get("fp") or docdata.get("fp")
@@ -576,6 +586,8 @@ def reconcile(
             next_mm = mm + 1 if mm < 12 else 1
             next_yyyy = yyyy if mm < 12 else yyyy + 1
             effective_cutoff = f"20-{next_mm:02d}-{next_yyyy}"
+    if not effective_cutoff:
+        effective_cutoff = datetime.now(UTC).strftime("%d-%m-%Y")
 
     g2b_records = flatten_gstr2b(gstr2b_raw)
 
@@ -589,6 +601,8 @@ def reconcile(
     rcm_inward_2b: list[dict[str, Any]] = []
     isd_inward_2b: list[dict[str, Any]] = []
     impg_inward_2b: list[dict[str, Any]] = []
+    review_required: list[dict[str, Any]] = []
+    rcm_liability_records: list[dict[str, Any]] = []
 
     matched_2b_indices: set[int] = set()
 
@@ -637,11 +651,29 @@ def reconcile(
         candidates = _find_match_candidates(
             ctin, norm_in, trail_in, g2b_exact_map, g2b_trailing_map, matched_2b_indices
         )
+        # Narrow repeated numbers by documentary date and port before ambiguity checks.
+        supplied_date = pr_inv.get("idt") or pr_inv.get("date") or pr_inv.get("invoice_date")
+        if supplied_date and len(candidates) > 1:
+            date_candidates = [
+                (idx, rec) for idx, rec in candidates
+                if normalize_date_str(supplied_date) in [
+                    normalize_date_str(rec[key]) for key in ("idt", "oidt", "ont_dt", "odocdt") if rec.get(key)
+                ]
+            ]
+            if date_candidates:
+                candidates = date_candidates
+        if pr_inv.get("port_code") and len(candidates) > 1:
+            port_candidates = [(idx, rec) for idx, rec in candidates if rec.get("port_code") == pr_inv["port_code"]]
+            if port_candidates:
+                candidates = port_candidates
 
         if not candidates:
             # Not found in 2B
             item_record = {**pr_inv, "reason": "Missing in GSTR-2B (Supplier not filed GSTR-1 yet)"}
             in_books_only.append(item_record)
+            if str(pr_inv.get("rchrg", "N")).upper() == "Y":
+                rcm_liability_records.append(pr_inv)
+                review_required.append({"books_invoice": pr_inv, "reason": "RCM liability from books; verify cash payment and claim separately"})
             continue
 
         # Sort candidates by tax amount and taxable value proximity to books invoice
@@ -664,6 +696,54 @@ def reconcile(
             "txval_diff": diff_txval
         }
 
+        # Liability survives blocked/time-barred credit. It is not an ITC bucket.
+        if best_2b.get("rchrg") == "Y" or str(pr_inv.get("rchrg", "N")).upper() == "Y":
+            rcm_liability_records.append(pr_inv)
+
+        original_numbers = [best_2b.get(k, "") for k in ("inum", "oinum", "ont_num", "odocnum")]
+        identity_reasons = []
+        if norm_in not in [normalize_inum(n) for n in original_numbers if n]:
+            identity_reasons.append("Invoice number differs; trailing digits are only a suggestion")
+        if len(candidates) > 1:
+            identity_reasons.append("Ambiguous invoice identity; multiple 2B candidates")
+        book_date = pr_inv.get("idt") or pr_inv.get("date") or pr_inv.get("invoice_date")
+        if not book_date:
+            review_required.append({**match_entry, "reason": "Books invoice date is missing; verify before relying on this draft"})
+            continue
+        if not best_2b.get("idt"):
+            identity_reasons.append("2B document date is missing")
+        if pr_inv.get("previously_claimed") is True:
+            review_required.append({**match_entry, "reason": "Previously claimed invoice excluded; use a separately reviewed reversal/reclaim schedule"})
+            continue
+        if best_2b["section"] in ("CDNR", "CDNA") and pr_inv.get("ntty") != best_2b.get("ntty"):
+            identity_reasons.append("Credit/debit note type must agree with books")
+        if book_date and best_2b.get("idt"):
+            valid_dates = [best_2b.get(k) for k in ("idt", "oidt", "ont_dt", "odocdt") if best_2b.get(k)]
+            if normalize_date_str(book_date) not in [normalize_date_str(d) for d in valid_dates]:
+                identity_reasons.append("Invoice date differs")
+        if pr_inv.get("pos") and best_2b.get("pos") and str(pr_inv["pos"]).zfill(2) != str(best_2b["pos"]).zfill(2):
+            identity_reasons.append("Place of supply differs")
+        if best_2b["section"] in ("IMPG", "IMPGSEZ"):
+            if not pr_inv.get("port_code") or not best_2b.get("port_code"):
+                identity_reasons.append("Import requires port code in books and 2B")
+            elif pr_inv["port_code"] != best_2b["port_code"]:
+                identity_reasons.append("BoE port differs")
+        if identity_reasons:
+            review_required.append({**match_entry, "reason": "; ".join(identity_reasons)})
+            continue
+        if str(best_2b.get("itcavl", "")).upper() not in ("Y", "N", "RS"):
+            review_required.append({**match_entry, "reason": "Unknown 2B availability status"})
+            continue
+
+        head_diff = max(abs(safe_float(pr_inv.get(h, 0)) - best_2b.get(h, 0)) for h in ("iamt", "camt", "samt", "csamt"))
+        if head_diff > 1.0 or diff_txval > 1.0:
+            value_mismatches.append(match_entry)
+            continue
+        # HSN is a review indicator, never sufficient evidence of blocked credit.
+        if str(pr_inv.get("hsn_sc", ""))[:4] in BLOCKED_HSNS and "is_blocked_17_5" not in pr_inv:
+            review_required.append({**match_entry, "reason": "Confirm business use and Section 17(5) exceptions"})
+            continue
+
         # 1. Section 16(4) Time Limit Gate (Books side) -> Table 4(D)(2)
         if is_16_4:
             ineligible_2b.append({**match_entry, "reason": "Section 16(4) Time Limit Expired"})
@@ -671,7 +751,9 @@ def reconcile(
 
         # 2. Inward RCM supplies (rchrg == 'Y') -> Table 4(A)(3) regardless of itcavl
         if best_2b.get("rchrg") == "Y":
-            if is_blocked:
+            if pr_inv.get("rcm_paid") is not True:
+                review_required.append({**match_entry, "reason": "RCM cash payment must be confirmed before credit is proposed"})
+            elif is_blocked:
                 blocked_17_5.append({**match_entry, "reason": "Section 17(5) Blocked Credit"})
             else:
                 rcm_inward_2b.append({
@@ -753,7 +835,7 @@ def reconcile(
         # 6. Single-Axis Matching (tax_diff <= ₹1.00 is TOLERANCE_MATCH per guide)
         if diff_tax == 0.0 and diff_txval == 0.0:
             matched.append(match_entry)
-        elif diff_tax <= 1.0:
+        elif head_diff <= 1.0 and diff_txval <= 1.0:
             tolerance_matched.append(match_entry)
         else:
             value_mismatches.append(match_entry)
@@ -764,12 +846,15 @@ def reconcile(
     for idx, rec in enumerate(g2b_records):
         if idx not in matched_2b_indices:
             in_2b_only.append(rec)
-            if rec["section"] in ("IMPG", "IMPGSEZ"):
-                impg_inward_2b.append(rec)
-            elif rec["section"] in ("ISD", "ISDA"):
-                isd_inward_2b.append(rec)
-            else:
-                unrecorded_purchases.append(rec)
+            unrecorded_purchases.append(rec)
+            review_required.append({"gstr2b_invoice": rec, "reason": "Unmatched 2B document; verify books and eligibility before claiming"})
+
+    # Gross availment includes current-period amounts subsequently reversed.
+    # Route special sections after matching, never from the unmatched loop.
+    gross_entries = matched + tolerance_matched + blocked_17_5 + rule_37_reversals
+    impg_inward_2b = [m["gstr2b_invoice"] for m in gross_entries if m["gstr2b_invoice"]["section"] in ("IMPG", "IMPGSEZ")]
+    isd_inward_2b = [m["gstr2b_invoice"] for m in gross_entries if m["gstr2b_invoice"]["section"] in ("ISD", "ISDA")]
+    rcm_inward_2b += [m for m in blocked_17_5 if m["gstr2b_invoice"].get("rchrg") == "Y"]
 
     # Calculate GSTR-3B Table 4 Amounts
     # Table 4(A)(1) Import of Goods (including SEZ imports)
@@ -793,7 +878,7 @@ def reconcile(
     # Value mismatches are NOT auto-claimed: their ITC is held in a review bucket
     # (see table_4_a_5_value_mismatch_hold) pending user confirmation, per the
     # "never claim unverified ITC" rule.
-    matched_or_tol = [m for m in matched + tolerance_matched if m["gstr2b_invoice"]["section"] not in ["IMPG", "IMPGSEZ", "ISD", "ISDA"]]
+    matched_or_tol = [m for m in gross_entries if m["gstr2b_invoice"]["section"] not in ["IMPG", "IMPGSEZ", "ISD", "ISDA"] and m["gstr2b_invoice"].get("rchrg") != "Y"]
     claim_i = sum(m["gstr2b_invoice"]["iamt"] for m in matched_or_tol)
     claim_c = sum(m["gstr2b_invoice"]["camt"] for m in matched_or_tol)
     claim_s = sum(m["gstr2b_invoice"]["samt"] for m in matched_or_tol)
@@ -830,6 +915,13 @@ def reconcile(
     def_cs = sum(safe_float(b.get("csamt", 0.0)) for b in in_books_only)
 
     return {
+        "schema_version": "2.0",
+        "classification_performed": True,
+        "evaluation_cutoff": effective_cutoff,
+        "rcm_liability": {
+            h: round_cur(sum(safe_float(r.get(h, 0)) for r in rcm_liability_records))
+            for h in ("txval", "iamt", "camt", "samt", "csamt")
+        },
         "summary": {
             "total_books_invoices": len(purchase_register),
             "total_2b_invoices": len(g2b_records),
@@ -846,6 +938,7 @@ def reconcile(
             "isd_count": len(isd_inward_2b),
             "impg_count": len(impg_inward_2b),
             "value_mismatch_itc_held_total": round_cur(hold_i + hold_c + hold_s + hold_cs)
+            , "review_required_count": len(review_required)
         },
         "gstr3b_table_4_auto_population": {
             "table_4_a_1_import_goods": {
@@ -899,6 +992,7 @@ def reconcile(
             }
         },
         "details": {
+            "review_required": review_required,
             "exact_matched": matched,
             "tolerance_matched": tolerance_matched,
             "value_mismatches": value_mismatches,
@@ -934,14 +1028,10 @@ def main():
         pr_data = json.load(f)
     with open(g2b_file, encoding="utf-8") as f:
         g2b_data = json.load(f)
+    from scripts.workflow import purchase_records, validate_2b
 
-    if isinstance(pr_data, dict):
-        raw_list = pr_data.get("purchases") or pr_data.get("invoices") or []
-        pr_list: list[dict[str, Any]] = raw_list if isinstance(raw_list, list) else []
-    elif isinstance(pr_data, list):
-        pr_list = pr_data
-    else:
-        pr_list = []
+    pr_list = purchase_records(pr_data)
+    validate_2b(g2b_data)
 
     result = reconcile(pr_list, g2b_data, _16_4_cutoff=cutoff)
 

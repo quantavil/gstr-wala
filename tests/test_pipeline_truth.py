@@ -292,7 +292,7 @@ class TestFilingPackConsistency:
         # Check single-axis description in Recon report
         with open(recon_pack, encoding="utf-8") as f:
             recon_text = f.read()
-        assert "single-axis +/- ₹1.00 tax tolerance" in recon_text
+        assert "+/- ₹1.00 per tax head and taxable value" in recon_text
 
 
 class TestCliEndToEnd:

@@ -54,6 +54,9 @@ GSTR1_PORTAL_VERSION = "gstr-wala-gstr1-1.0"
 
 def generate_portal_gstr1(input_data: dict[str, Any], portal_version: str | None = None) -> dict[str, Any]:
     """Transforms canonical input data into GSTN offline-tool-shaped GSTR-1 JSON."""
+    from scripts.workflow import require_return
+
+    require_return(input_data)
     comp = compute_gstr1_tables(input_data)
 
     gstin = comp["gstin"]

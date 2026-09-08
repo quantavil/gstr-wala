@@ -186,9 +186,9 @@ def generate_reconciliation_report(recon_data: dict[str, Any], output_path: str)
             ["Category", "Invoice Count", "Description"],
             [
                 ["Exact Matched Invoices", s.get("exact_matched_count", 0), "100% match on GSTIN, Invoice No, and Tax values"],
-                ["Tolerance Matched Invoices", s.get("tolerance_matched_count", 0), "Matched within single-axis +/- ₹1.00 tax tolerance"],
+                ["Tolerance Matched Invoices", s.get("tolerance_matched_count", 0), "Matched within +/- ₹1.00 per tax head and taxable value"],
                 ["Value Mismatches", s.get("value_mismatch_count", 0), f"Discrepancy in tax > ₹1.00 — ITC of ₹{s.get('value_mismatch_itc_held_total', 0.0):,.2f} HELD for manual review (not auto-claimed)"],
-                ["In Books Only", s.get("in_books_only_count", 0), "Supplier not filed GSTR-1 yet (Rule 36(4) Deferred)"],
+                ["In Books Only", s.get("in_books_only_count", 0), "Missing from this 2B; investigate reporting, period and document identity"],
                 ["In 2B Only", s.get("in_2b_only_count", 0), "Unrecorded purchases or incorrect GSTIN"],
                 ["Section 17(5) Blocked Credit", s.get("blocked_17_5_count", 0), "Permanent reversal in Table 4(B)(1)"],
                 ["Rule 37 Reversals", s.get("rule_37_count", 0), "Unpaid > 180 days (Temporary reversal in 4(B)(2))"]

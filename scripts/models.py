@@ -127,10 +127,10 @@ class GSTRItem(BaseModel):
     camt: float = Field(default=0.0, ge=0.0, description="Central Tax amount")
     samt: float = Field(default=0.0, ge=0.0, description="State/UT Tax amount")
     csamt: float = Field(default=0.0, ge=0.0, description="Cess amount")
-    hsn_sc: str | None = Field(default="9999", description="HSN or SAC Code")
-    desc: str | None = Field(default="Goods / Services", description="Description")
-    uqc: str | None = Field(default="NOS", description="Unit Quantity Code")
-    qty: float | None = Field(default=1.0, ge=0.0, description="Quantity")
+    hsn_sc: str | None = Field(default=None, description="HSN or SAC Code")
+    desc: str | None = Field(default=None, description="Description")
+    uqc: str | None = Field(default=None, description="Unit Quantity Code")
+    qty: float | None = Field(default=None, ge=0.0, description="Quantity")
 
     @field_validator("rt")
     @classmethod

@@ -7,7 +7,7 @@ description: >-
   reconcile purchase registers against GSTR-2B, optimize ITC set-off under Rule 88A / Section 49,
   compute Section 50 interest or Section 47 late fees, check DRC-01B / DRC-01C mismatch risks,
   convert multi-page PDF/image bills to page-by-page visual images, generate official GST portal
-  offline JSON returns, render certified CA tax audit statements, check live statutory compliance
+  draft offline JSON returns, render computation statements for CA review, check live statutory compliance
   updates, or asks about GST rates, HSN codes, Table 4 ITC, blocked credit under Section 17(5),
   or PMT-06 challan generation.
 license: GPLv3
@@ -20,6 +20,14 @@ metadata:
 # gstr-wala - Indian GST Filing, Deterministically
 
 You are helping an Indian business, accountant, or tax practitioner prepare, reconcile, and file their **GSTR-1** and **GSTR-3B** returns. You orchestrate and interview; Python computes deterministically; the user files on the portal. Work through the numbered workflow below, keeping `work/progress.md` updated so an interrupted session can resume seamlessly.
+
+## Current preparation contract
+
+Read [README.md](README.md) and [HARDENING.md](HARDENING.md) before preparing returns. Use the standard reconciler for filing drafts; fast matching is exploratory. Review `ca_review.md` and every issue in `review_manifest.json` with the CA. Correct inputs and regenerate before recording decisions with `approve-run`; use `verify-run` before relying on reviewed artifacts. This is one consolidated professional review, not a certification by the software.
+
+The pipeline requires a fresh output directory, validates purchase structure and 2B taxpayer/period, and accepts opening ledgers through `--context`. Always supply the actual filing date for a late claim. RCM liability is independent of credit; credit requires explicit cash-payment confirmation. HSN alone does not decide blocked credit. Missing dates, ambiguous identities and unmatched imports require review rather than automatic claims.
+
+A hosted AI assistant reading documents transmits their contents to its provider. Under the zero-outbound policy, use a local processing environment for client records; a local Python process alone does not make hosted model inspection local.
 
 All engines live in `scripts/`, reference guides in `references/`, schemas in `schemas/`, and rules configuration in `config/` relative to this skill directory.
 
@@ -59,10 +67,10 @@ All engines live in `scripts/`, reference guides in `references/`, schemas in `s
   ```bash
   uv run pytest -q
   ```
-  Expect all 227 tests to pass. If any test fails, stop immediately.
+  Expect the current test suite to pass. If a test fails, resolve the failure before using the engine to prepare a client return.
 - Confirm session parameters:
   - Taxpayer GSTIN & State
-  - Return Period — monthly MMYYYY (e.g. `042026` for April 2026); QRMP quarterly not yet supported — use explicit due date if needed
+  - Return Period — monthly MMYYYY (e.g. `042026` for April 2026); QRMP quarterly is not supported by merely supplying a due date
   - Due date and planned filing date
   - Annual Turnover slab (`upto_1.5cr`, `1.5cr_to_5cr`, `above_5cr`)
 
@@ -119,7 +127,7 @@ Ask the user to drop their records into `docs/`:
 
   ```
 - Review the reconciliation summary with the user:
-  - `EXACT_MATCH` & `TOLERANCE_MATCH` $\to$ Eligible for Table 4(A)(5)
+  - Exact/tolerance matching is separate from eligibility; inspect the actual Table 4 buckets and review issues.
   - `IN_BOOKS_ONLY` $\to$ Rule 36(4) Deferred (Supplier has not filed GSTR-1 yet)
   - `BLOCKED_17_5` $\to$ Motor vehicles, food catering $\to$ Table 4(B)(1) Permanent Reversal
   - `RULE_37_REVERSAL` $\to$ Unpaid $> 180$ days $\to$ Table 4(B)(2) Temporary Reversal
@@ -144,7 +152,7 @@ Ask the user to drop their records into `docs/`:
 
    - Routes SEZ supplies to Table 3.1(b) Zero-Rated.
    - Wires inward RCM liability from reconciliation to Table 3.1(d) (Outward liability payable 100% in cash) and Table 4(A)(3) (Eligible Inward RCM ITC).
-- The **pipeline** (`scripts/cli.py pipeline`) automatically executes the **Pre-Emptive DRC-01B / DRC-01C Radar** to guarantee outward liabilities and ITC claims are within safe thresholds. The standalone bridge (`scripts/bridge_gstr1_to_gstr3b.py`) only populates Table 3/4; run the radar via the pipeline or `python3 -c "from scripts.bridge_gstr1_to_gstr3b import check_drc_mismatch_risks; ..."`.
+- The pipeline performs internal variance comparisons. These do not predict notices or establish safe thresholds; compare independently obtained portal statements during CA review.
 
 ### Step 7: Optimize ITC Set-Off & Compute PMT-06 Challan
 - Execute the Rule 88A optimization solver:
@@ -161,7 +169,7 @@ Ask the user to drop their records into `docs/`:
   ```bash
   python3 scripts/generate_gstr3b_json.py work/gstr3b_input.json output/gstr3b_portal.json
   ```
-- Generate certified CA Statements & PDF:
+- Generate draft computation statements for CA review:
   ```bash
   uv run python3 scripts/generate_pdf_statement.py work/gstr3b_input.json output/gstr3b_statement.pdf
   ```
@@ -190,7 +198,7 @@ Guide the user step-by-step through filing on `www.gst.gov.in` using `references
 
 ### Step 10: Post-Filing Summary & Progress Update
 - Record ARNs, filing dates, and Challan CIN numbers into `work/progress.md`.
-- Provide final filing certificate summary.
+- Provide an archive summary of the user-supplied filing receipts; do not claim software-generated CA certification.
 
 ---
 
@@ -206,7 +214,7 @@ Whenever a new CBIC notification or GST Council advisory is issued:
    ```bash
    python3 scripts/compliance_radar.py --apply patch.json
    ```
-   The engine stages the threshold changes in `config/rules_manifest.json`, runs all 227 test suites and invariant fuzzers, and commits the update only if 100% pass (with automatic rollback on failure).
+   The engine stages changes and runs the current verification suite, rolling back on failure. Passing tests establishes internal consistency, not legal authority or currency. Independently verify the notification and effective date before applying a rule change.
 
 
 ---

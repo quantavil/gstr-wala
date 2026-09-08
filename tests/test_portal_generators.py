@@ -19,7 +19,7 @@ def test_generate_gstr1_portal_schema():
                 "inum": "INV-001",
                 "idt": "10-04-2026",
                 "pos": "29",
-                "ctin": "29BBBBB1111B1Z2",
+                "ctin": "29BBBBB1111B1ZJ",
                 "val": 118000.0,
                 "items": [{"txval": 100000.0, "rt": 18.0, "iamt": 18000.0, "hsn_sc": "8471", "uqc": "NOS", "qty": 10}]
             },

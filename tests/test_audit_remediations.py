@@ -99,8 +99,9 @@ def test_blocked_hsn_list_alignment():
         }
     }
     res = reconcile(purchases, g2b)
-    assert res["summary"]["blocked_17_5_count"] == 2
-    assert res["gstr3b_table_4_auto_population"]["table_4_b_1_permanent_reversals_17_5"]["total"] == 93600.0
+    assert res["summary"]["blocked_17_5_count"] == 0
+    assert res["summary"]["review_required_count"] == 2
+    assert res["gstr3b_table_4_auto_population"]["table_4_b_1_permanent_reversals_17_5"]["total"] == 0.0
 
 
 def test_pos_normalization_single_digit():
@@ -140,7 +141,7 @@ def test_gstr1_table_12_hsn_rt_emission():
                 "inum": "INV-01",
                 "idt": "10-04-2026",
                 "pos": "27",
-                "ctin": "27BBBBB0000B1Z1",
+                "ctin": "27BBBBB0000B1ZT",
                 "items": [{"txval": 1000.0, "rt": 18.0, "camt": 90.0, "samt": 90.0, "hsn_sc": "8471", "desc": "Laptops"}]
             }
         ]
@@ -336,7 +337,7 @@ def test_derive_taxes_use_statutory_half_up_rounding():
     assert out_inter["invoices"][0]["val"] == 0.30
 
     rows_intra = [
-        {"invoice_number": "X2", "invoice_date": "05-04-2026", "taxable_value": "0.25", "gst_rate": "18"}
+        {"invoice_number": "X2", "invoice_date": "05-04-2026", "pos": "27", "taxable_value": "0.25", "gst_rate": "18"}
     ]
     out_intra = parse_rows_sales(rows_intra, "27AAAAA0000A1Z2", "042026", derive_taxes=True)
     item_intra = out_intra["invoices"][0]["items"][0]
@@ -349,7 +350,7 @@ def test_portal_version_markers_are_overridable():
         "gstin": "27AAAAA0000A1Z2",
         "fp": "042026",
         "invoices": [
-            {"inum": "I1", "idt": "05-04-2026", "pos": "27", "items": [{"txval": 1000.0, "rt": 18.0, "iamt": 180.0}]}
+            {"inum": "I1", "idt": "05-04-2026", "pos": "29", "items": [{"txval": 1000.0, "rt": 18.0, "iamt": 180.0}]}
         ],
     }
     default_json = generate_portal_gstr1(g1_data)

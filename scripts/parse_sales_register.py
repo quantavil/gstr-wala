@@ -30,6 +30,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 from typing import Any
 
+from scripts.place_of_supply import resolve_pos
 from scripts.utils import excel_cell_to_str, normalize_date_str, round_cur, safe_float_strict
 
 _INUM_ALIASES = ("invoice_number", "inv_num", "inum", "invoice no", "invoice_no")
@@ -120,7 +121,7 @@ def parse_rows_sales(
             )
         idt = normalize_date_str(date_raw, context=f"Row {row_idx} column 'invoice_date'")
         ctin = _pick(row_norm, _CTIN_ALIASES)
-        pos = _pick(row_norm, _POS_ALIASES) or (ctin[:2] if ctin else gstin[:2])
+        pos, pos_basis = resolve_pos(row_norm, _pick(row_norm, _POS_ALIASES), ctin)
 
         txval = _money(row_norm, _TXVAL_ALIASES, row_idx, required=True)
         rt = _money(row_norm, _RATE_ALIASES, row_idx)
@@ -180,6 +181,8 @@ def parse_rows_sales(
 
         existing = invoices_map.get(inum)
         if existing:
+            if existing["idt"] != idt or existing["pos"] != str(pos).zfill(2):
+                raise ValueError(f"Row {row_idx}: conflicting date or place of supply for invoice '{inum}'")
             prev_ctin = existing.get("ctin", "")
             cur_ctin = ctin.upper() if ctin else ""
             if prev_ctin and cur_ctin and prev_ctin != cur_ctin:
@@ -204,7 +207,12 @@ def parse_rows_sales(
                 invoices_map[inum]["ctin"] = ctin.upper()
             if exp_typ:
                 invoices_map[inum]["exp_typ"] = exp_typ
+            for field in ("rchrg", "inv_typ", "etin", "port_code", "sb_num", "sb_dt"):
+                if row_norm.get(field):
+                    invoices_map[inum][field] = row_norm[field]
 
+        if pos_basis:
+            invoices_map[inum]["pos_basis"] = pos_basis
         invoices_map[inum]["items"].append({
             "txval": txval,
             "rt": rt,
@@ -282,6 +290,8 @@ def main():
 
     if not isinstance(canonical, dict) or not canonical.get("invoices"):
         sys.exit(f"Error: '{sales_file}' contains no data rows — nothing to file.")
+    if canonical.get("gstin") != args.gstin or canonical.get("fp") != args.fp:
+        sys.exit("Error: JSON taxpayer/period does not match the requested GSTIN and period")
 
     with open(out_file, "w", encoding="utf-8") as f:
         json.dump(canonical, f, indent=2)
