@@ -31,6 +31,9 @@ wheels/
 htmlcov/
 .hypothesis/
 .mypy_cache/
+.ruff_cache/
+node_modules/
+.bun/
 
 # User Financial Data & Workspaces (Never commit raw taxpayer data)
 docs/

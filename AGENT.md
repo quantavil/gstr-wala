@@ -14,7 +14,8 @@
 - **2026-09-08:** GST Portal offline upload validation root cause: Portal validator strictly requires `"version": "GST3.2.4"` and `"hash": "hash"`, and rejects portal-download fields (`filing_typ`, `cfs`, `flag`, `updby`, `cflag`, `chksum`).
 - **2026-09-08:** Official `GST Offline Tool.exe` reverse-engineering: App unpacked via `innoextract` is Electron/Node; `readXML` assumes multi-sheet `.xlsx` (`b2b` sheet, skips 3 rows), causing flat CSVs to be silently dropped.
 - **2026-09-08:** GSTR-1 item numbering and inactive tax heads: Official tool sets `num = int(rt * 100)` (e.g. 1800, 500) and prunes inactive zero-tax heads (`iamt` on intra, `camt`/`samt` on inter, `csamt` when 0) before `omitEmpty`.
-- **2026-09-08:** Runtime preference: User strictly prefers Bun (`/usr/bin/bun`, v1.4.0) over Node.js for all JS/TS tools, headless pipelines, and JSON validations.
+- **2026-09-08:** CI Mypy type collision & duplicate annotation: Variable type re-assignment across branches in `omit_empty_structure` and repeated explicit typing of `itm_det` broke CI; renamed branch vars and pruned redundant annotation.
+- **2026-09-08:** Runtime preference: User strictly prefers Bun (upgraded to latest v1.4.2) over Node.js for all JS/TS tools, headless pipelines, and JSON validations.
 - **2026-09-08:** RCM liability vs credit separation: Recipient RCM liability is strictly 100% cash payable (Table 3.1d); corresponding ITC (Table 4A3) requires explicit payment confirmation (`rcm_paid: true`).
 - **2026-08-25:** Bridge CLI input overwrite: `"3b" not in name` heuristic silently overwrote recon inputs; fixed with content-based detection and `--force` guard.
 - **2026-08-25:** Statutory dues omitted in portal upload: Sec 50 interest and Sec 47 late fees were not forwarded to Table 6.1 `paid_cash`; wired `interest_details` while keeping `paid_cash` tax-only.

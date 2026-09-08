@@ -33,3 +33,11 @@ jobs:
 
       - name: Run Pytest Suite
         run: uv run pytest
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Run Bun Tests
+        run: bun test

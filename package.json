@@ -18,5 +18,8 @@
     "bun"
   ],
   "author": "quantavil",
-  "license": "GPL-3.0-or-later"
+  "license": "GPL-3.0-or-later",
+  "devDependencies": {
+    "@types/bun": "^1.4.2"
+  }
 }

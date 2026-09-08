@@ -53,11 +53,11 @@ GSTR1_PORTAL_VERSION = "GST3.2.4"
 def omit_empty_structure(obj: Any) -> Any:
     """Recursively prunes empty lists and empty dicts matching official offline tool's omitEmpty."""
     if isinstance(obj, dict):
-        cleaned = {k: omit_empty_structure(v) for k, v in obj.items()}
-        return {k: v for k, v in cleaned.items() if v not in ([], {}, "", None)}
+        cleaned_dict = {k: omit_empty_structure(v) for k, v in obj.items()}
+        return {k: v for k, v in cleaned_dict.items() if v not in ([], {}, "", None)}
     if isinstance(obj, list):
-        cleaned = [omit_empty_structure(item) for item in obj]
-        return [item for item in cleaned if item not in ([], {}, "", None)]
+        cleaned_list = [omit_empty_structure(item) for item in obj]
+        return [item for item in cleaned_list if item not in ([], {}, "", None)]
     return obj
 
 
@@ -133,7 +133,7 @@ def generate_portal_gstr1(
         for itm_idx, itm in enumerate(inv.get("items", [])):
             rt = float(itm.get("rt", 0.0))
             num = int(rt * 100) if rt > 0 else (itm_idx + 1)
-            itm_det: dict[str, Any] = {
+            itm_det = {
                 "rt": rt,
                 "txval": round_cur(itm.get("txval", 0.0)),
                 "iamt": round_cur(itm.get("iamt", 0.0)),
