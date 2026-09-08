@@ -65,5 +65,3 @@ uv run gstr-wala verify-run output/fresh-run
 - [CBIC Notification 9/2025–Integrated Tax (Rate)](https://courier.cbic.gov.in/advisory/2025/NOTIFICATION%20NO.%209_2025-INTEGRATED%20TAX%20%28RATE%29%20-1759486719.pdf): source for the 2025 rate schedule; specific supply classification still requires review.
 - [GST Portal BoE guide](https://tutorial.gst.gov.in/userguide/taxpayersdashboard/Manual_boe.htm): documentary identifiers for import investigations.
 - [Current GSTR-3B guide](https://tutorial.gst.gov.in/userguide/returns/GSTR3B.htm): use for the actual portal workflow and current reporting behaviour.
-
-The [original review](PROJECT_REVIEW.md) is retained as a historical audit, not a description of all current behaviour.

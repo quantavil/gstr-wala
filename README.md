@@ -2,7 +2,7 @@
 
 Local Python tools for preparing GSTR-1, reconciling purchases with GSTR-2B, drafting GSTR-3B, and estimating ITC set-off and cash requirements. Includes an optional AI-agent workflow in [SKILL.md](SKILL.md).
 
-**Status: preparation tool requiring CA review.** The engine prepares a draft and one consolidated exception list for professional review. [HARDENING.md](HARDENING.md) lists implemented corrections and remaining scope limits; [PROJECT_REVIEW.md](PROJECT_REVIEW.md) preserves the original audit. A generated statement is a computation draft, not a CA certification. A measured 95–99% automation/accuracy claim has not yet been established against independent CA-approved returns.
+**Status: preparation tool requiring CA review.** The engine prepares a draft and one consolidated exception list for professional review. [HARDENING.md](HARDENING.md) lists implemented corrections and remaining scope limits. A generated statement is a computation draft, not a CA certification. A measured 95–99% automation/accuracy claim has not yet been established against independent CA-approved returns.
 
 ## Who is it useful for?
 
@@ -327,8 +327,6 @@ Key architectural findings:
 `scripts/cli.py` orchestrates the engines, bridge, serializers and reports. `reconcile_gstr2b.py` performs standard reconciliation; `reconcile_fast.py` offers exploratory accelerated matching. `gst_engine.py` aggregates outward supplies and `itc_optimizer.py` computes set-off. `schemas/` holds project contracts, `config/rules_manifest.json` stores rules, and `tests/` holds automated checks.
 
 `uv run python scripts/discover_statutory_rules.py` uses a bundled snapshot by default. Add `--live` to attempt public advisory discovery; inspect the source status because fallback is possible. Discovery and passing tests do not establish legal currency. Verify notifications and effective dates before using rule patches.
-
-See [PROJECT_REVIEW.md](PROJECT_REVIEW.md) for evidence, architecture recommendations and release priorities.
 
 ## License
 
