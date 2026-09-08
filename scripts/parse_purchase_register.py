@@ -21,28 +21,9 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 from typing import Any
 
-from scripts.utils import excel_cell_to_str, normalize_date_str, round_cur, safe_float_strict
+from scripts.utils import excel_cell_to_str, normalize_date_str, parse_money_field, round_cur, safe_float_strict
 
-
-def _money(row_norm: dict[str, str], aliases: tuple, row_idx: int) -> float:
-    """Parses an optional money field truthfully.
-
-    Absent/blank cell -> 0.0; present-but-unparseable -> ValueError naming the
-    row and column.
-    """
-    for alias in aliases:
-        if alias not in row_norm:
-            continue
-        raw = row_norm[alias]
-        if raw == "":
-            continue
-        try:
-            return safe_float_strict(raw)
-        except ValueError:
-            raise ValueError(
-                f"Row {row_idx}: column '{alias}' has unparseable amount {raw!r}"
-            ) from None
-    return 0.0
+_money = parse_money_field
 
 
 def parse_csv_purchases(csv_path: str) -> list[dict[str, Any]]:

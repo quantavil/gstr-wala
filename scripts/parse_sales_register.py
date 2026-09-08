@@ -31,7 +31,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from typing import Any
 
 from scripts.place_of_supply import resolve_pos
-from scripts.utils import excel_cell_to_str, normalize_date_str, round_cur, safe_float_strict
+from scripts.utils import excel_cell_to_str, normalize_date_str, parse_money_field, round_cur, safe_float_strict
 
 _INUM_ALIASES = ("invoice_number", "inv_num", "inum", "invoice no", "invoice_no")
 _DATE_ALIASES = ("invoice_date", "date", "idt")
@@ -55,35 +55,7 @@ def _pick(row_norm: dict[str, str], aliases: tuple) -> str:
     return ""
 
 
-def _money(
-    row_norm: dict[str, str],
-    aliases: tuple,
-    row_idx: int,
-    required: bool = False,
-) -> float:
-    """Parses an optional money field truthfully.
-
-    Absent/blank cell -> 0.0 (blank means zero charge, not garbage).
-    Present-but-unparseable -> ValueError naming the row and column.
-    """
-    for alias in aliases:
-        if alias not in row_norm:
-            continue
-        raw = row_norm[alias]
-        if raw == "":
-            continue
-        try:
-            return safe_float_strict(raw)
-        except ValueError:
-            raise ValueError(
-                f"Row {row_idx}: column '{alias}' has unparseable amount {raw!r}"
-            ) from None
-    if required:
-        raise ValueError(
-            f"Row {row_idx}: missing required taxable value "
-            f"(tried columns: {', '.join(aliases)})"
-        )
-    return 0.0
+_money = parse_money_field
 
 
 def parse_rows_sales(

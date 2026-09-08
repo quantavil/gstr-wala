@@ -104,6 +104,7 @@ PERIOD_REGEX = re.compile(r"^(0[1-9]|1[0-2])20[2-9][0-9]$")
 
 # Base-36 Character set for Mod-36 GSTIN Checksum
 CHAR_SET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+_CHAR_MAP = {c: i for i, c in enumerate(CHAR_SET)}
 
 
 def compute_gstin_checksum(gstin14: str) -> str:
@@ -111,9 +112,9 @@ def compute_gstin_checksum(gstin14: str) -> str:
     factor = 1
     total = 0
     for char in gstin14:
-        if char not in CHAR_SET:
+        code_point = _CHAR_MAP.get(char)
+        if code_point is None:
             raise ValueError(f"Invalid character {char!r} in GSTIN '{gstin14}': not in CHAR_SET")
-        code_point = CHAR_SET.index(char)
         addend = factor * code_point
         factor = 1 if factor == 2 else 2
         addend = (addend // 36) + (addend % 36)

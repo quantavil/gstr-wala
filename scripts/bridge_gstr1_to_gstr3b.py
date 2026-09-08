@@ -28,7 +28,7 @@ from scripts.gst_engine import (
     compute_statutory_late_fee,
 )
 from scripts.itc_optimizer import optimize_from_input_dict
-from scripts.utils import round_cur
+from scripts.utils import round_cur, safe_float
 
 
 def derive_gstr3b_due_date(ret_period: str) -> str:
@@ -85,11 +85,11 @@ def bridge_gstr1_and_2b_to_3b(
         inv_typ = inv.get("inv_typ", "R")
         is_sez = inv_typ in ["SEZWP", "SEZWOP"]
         for itm in inv.get("items", []):
-            tx = float(itm.get("txval", 0.0))
-            i = float(itm.get("iamt", 0.0))
-            c = float(itm.get("camt", 0.0))
-            s = float(itm.get("samt", 0.0))
-            cs = float(itm.get("csamt", 0.0))
+            tx = safe_float(itm.get("txval", 0.0))
+            i = safe_float(itm.get("iamt", 0.0))
+            c = safe_float(itm.get("camt", 0.0))
+            s = safe_float(itm.get("samt", 0.0))
+            cs = safe_float(itm.get("csamt", 0.0))
 
             if is_sez:
                 # SEZ supplies are Zero-Rated per Section 16 IGST Act -> Table 3.1(b)
@@ -106,29 +106,27 @@ def bridge_gstr1_and_2b_to_3b(
     # B2CL
     for inv in g1_res["table_5_b2cl"]:
         for itm in inv.get("items", []):
-            taxable_txval += float(itm.get("txval", 0.0))
-            taxable_iamt += float(itm.get("iamt", 0.0))
-            taxable_csamt += float(itm.get("csamt", 0.0))
+            taxable_txval += safe_float(itm.get("txval", 0.0))
+            taxable_iamt += safe_float(itm.get("iamt", 0.0))
+            taxable_csamt += safe_float(itm.get("csamt", 0.0))
 
     # B2CS
     for row in g1_res["table_7_b2cs"]:
-        taxable_txval += float(row.get("txval", 0.0))
-        taxable_iamt += float(row.get("iamt", 0.0))
-        taxable_camt += float(row.get("camt", 0.0))
-        taxable_samt += float(row.get("samt", 0.0))
-        taxable_csamt += float(row.get("csamt", 0.0))
+        taxable_txval += safe_float(row.get("txval", 0.0))
+        taxable_iamt += safe_float(row.get("iamt", 0.0))
+        taxable_camt += safe_float(row.get("camt", 0.0))
+        taxable_samt += safe_float(row.get("samt", 0.0))
+        taxable_csamt += safe_float(row.get("csamt", 0.0))
 
     # Zero Rated (Table 6A Exports)
     for exp_inv in g1_res["table_6_exp"]:
         for itm in exp_inv.get("items", []):
-            zero_txval += float(itm.get("txval", 0.0))
-            zero_iamt += float(itm.get("iamt", 0.0))
-            zero_csamt += float(itm.get("csamt", 0.0))
+            zero_txval += safe_float(itm.get("txval", 0.0))
+            zero_iamt += safe_float(itm.get("iamt", 0.0))
+            zero_csamt += safe_float(itm.get("csamt", 0.0))
 
     # --- Net for Credit/Debit Notes (Table 9) & Advances (Table 11) ---
     # Credit notes (C) reduce taxable, Debit notes (D) increase it
-    from scripts.utils import safe_float
-
     cdnr_adj_txval = 0.0
     cdnr_adj_iamt = 0.0
     cdnr_adj_camt = 0.0
@@ -173,16 +171,16 @@ def bridge_gstr1_and_2b_to_3b(
 
     # Nil/Exempt (Table 8)
     exemp = g1_res.get("table_8_nil_exempt", {})
-    nil_txval = sum(float(v) for k, v in exemp.items() if "nil" in k or "expt" in k)
-    nongst_txval = sum(float(v) for k, v in exemp.items() if "ngsup" in k)
+    nil_txval = sum(safe_float(v) for k, v in exemp.items() if "nil" in k or "expt" in k)
+    nongst_txval = sum(safe_float(v) for k, v in exemp.items() if "ngsup" in k)
 
     # --- Table 3.2 Inter-state Supplies ---
     inter_state_supplies = []
     # From B2CL
     for inv in g1_res["table_5_b2cl"]:
         pos = inv.get("pos", "")
-        tx = sum(float(itm.get("txval", 0.0)) for itm in inv.get("items", []))
-        i = sum(float(itm.get("iamt", 0.0)) for itm in inv.get("items", []))
+        tx = sum(safe_float(itm.get("txval", 0.0)) for itm in inv.get("items", []))
+        i = sum(safe_float(itm.get("iamt", 0.0)) for itm in inv.get("items", []))
         inter_state_supplies.append({
             "pos": pos,
             "supply_type": "unregistered",
@@ -320,7 +318,7 @@ def populate_statutory_dues(gstr3b_input: dict[str, Any]) -> dict[str, Any]:
     if not lf_details:
         outward = gstr3b_input.get("outward_supplies", {})
         total_outward_tax = sum(
-            float(outward.get(section, {}).get(head, 0.0))
+            safe_float(outward.get(section, {}).get(head, 0.0))
             for section in ("taxable", "zero_rated", "rcm_inward")
             for head in ("iamt", "camt", "samt", "csamt")
         )
@@ -344,8 +342,8 @@ def check_drc_mismatch_risks(gstr1_summary: dict[str, Any], gstr3b_data: dict[st
     taxable = outward.get("taxable", {})
     zero = outward.get("zero_rated", {})
     g3b_tax = (
-        float(taxable.get("iamt", 0.0)) + float(taxable.get("camt", 0.0)) + float(taxable.get("samt", 0.0)) + float(taxable.get("csamt", 0.0)) +
-        float(zero.get("iamt", 0.0)) + float(zero.get("csamt", 0.0))
+        safe_float(taxable.get("iamt", 0.0)) + safe_float(taxable.get("camt", 0.0)) + safe_float(taxable.get("samt", 0.0)) + safe_float(taxable.get("csamt", 0.0)) +
+        safe_float(zero.get("iamt", 0.0)) + safe_float(zero.get("csamt", 0.0))
     )
 
     drc01b_diff = max(0.0, g1_tax - g3b_tax)
@@ -359,11 +357,11 @@ def check_drc_mismatch_risks(gstr1_summary: dict[str, Any], gstr3b_data: dict[st
     tot_avail = 0.0
     for cat_vals in avail.values():
         if isinstance(cat_vals, dict):
-            tot_avail += float(cat_vals.get("iamt", 0.0)) + float(cat_vals.get("camt", 0.0)) + float(cat_vals.get("samt", 0.0)) + float(cat_vals.get("csamt", 0.0))
+            tot_avail += safe_float(cat_vals.get("iamt", 0.0)) + safe_float(cat_vals.get("camt", 0.0)) + safe_float(cat_vals.get("samt", 0.0)) + safe_float(cat_vals.get("csamt", 0.0))
     tot_rev = 0.0
     for cat_vals in rev.values():
         if isinstance(cat_vals, dict):
-            tot_rev += float(cat_vals.get("iamt", 0.0)) + float(cat_vals.get("camt", 0.0)) + float(cat_vals.get("samt", 0.0)) + float(cat_vals.get("csamt", 0.0))
+            tot_rev += safe_float(cat_vals.get("iamt", 0.0)) + safe_float(cat_vals.get("camt", 0.0)) + safe_float(cat_vals.get("samt", 0.0)) + safe_float(cat_vals.get("csamt", 0.0))
     g3b_claimed_itc = max(0.0, tot_avail - tot_rev)
 
     drc01c_diff = max(0.0, g3b_claimed_itc - gstr2b_total_itc)
@@ -480,7 +478,7 @@ def main() -> None:
         json.dump(g3b_input, f, indent=2)
 
     all_other = g3b_input.get("itc", {}).get("available", {}).get("all_other", {})
-    tot_itc = float(all_other.get("iamt", 0.0)) + float(all_other.get("camt", 0.0)) + float(all_other.get("samt", 0.0)) + float(all_other.get("csamt", 0.0))
+    tot_itc = safe_float(all_other.get("iamt", 0.0)) + safe_float(all_other.get("camt", 0.0)) + safe_float(all_other.get("samt", 0.0)) + safe_float(all_other.get("csamt", 0.0))
 
     print(f"SUCCESS: Auto-populated GSTR-3B input -> '{out_file}'")
     print(f"Taxable: ₹{g3b_input['outward_supplies']['taxable']['txval']:,.2f}, Total ITC: ₹{tot_itc:,.2f}")

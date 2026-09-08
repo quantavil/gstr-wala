@@ -3,7 +3,7 @@
 import datetime
 import math
 import re
-from decimal import ROUND_HALF_UP, Decimal
+from decimal import ROUND_HALF_UP, Decimal, DecimalException
 from functools import lru_cache
 from typing import Any
 
@@ -17,7 +17,7 @@ def round_cur(val: Any) -> float:
         if not d.is_finite():
             return 0.0
         return float(d.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
-    except Exception:
+    except (ValueError, TypeError, DecimalException):
         return 0.0
 
 
@@ -157,6 +157,37 @@ def safe_float_strict(val: Any) -> float:
     return _to_float_truthful(val)
 
 
+def parse_money_field(
+    row_norm: dict[str, str],
+    aliases: tuple[str, ...],
+    row_idx: int,
+    required: bool = False,
+) -> float:
+    """Parses an optional money field truthfully across aliases.
+
+    Absent/blank cell -> 0.0 (blank means zero charge, not garbage).
+    Present-but-unparseable -> ValueError naming the row and column.
+    """
+    for alias in aliases:
+        if alias not in row_norm:
+            continue
+        raw = row_norm[alias]
+        if raw == "":
+            continue
+        try:
+            return safe_float_strict(raw)
+        except ValueError:
+            raise ValueError(
+                f"Row {row_idx}: column '{alias}' has unparseable amount {raw!r}"
+            ) from None
+    if required:
+        raise ValueError(
+            f"Row {row_idx}: missing required taxable value "
+            f"(tried columns: {', '.join(aliases)})"
+        )
+    return 0.0
+
+
 # --- Canonical cell / date normalization ------------------------------------
 
 
@@ -240,7 +271,7 @@ def safe_int(val: Any, default: int = 0) -> int:
     try:
         f = safe_float(val, default=float(default))
         return round(f)
-    except Exception:
+    except (ValueError, TypeError, OverflowError):
         return default
 
 

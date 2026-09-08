@@ -26,31 +26,27 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from scripts.constants import (
     B2CL_THRESHOLD,
     DATE_REGEX,
-    GSTIN_REGEX,
     PERIOD_REGEX,
     STATE_CODES,
     VALID_RATES,
-    compute_gstin_checksum,
     detect_return_type,
 )
+from scripts.constants import (
+    GSTIN_REGEX as GSTIN_REGEX,
+)
+from scripts.constants import (
+    compute_gstin_checksum as compute_gstin_checksum,
+)
+from scripts.models import validate_gstin_str
 
 
 def is_valid_gstin(gstin: str) -> tuple[bool, str | None]:
     """Validates GSTIN regex and checksum."""
-    if not isinstance(gstin, str):
-        return False, "GSTIN must be a string"
-    gstin = gstin.strip().upper()
-    if not GSTIN_REGEX.match(gstin):
-        return False, f"Invalid GSTIN format: '{gstin}' (must be 15 alphanumeric characters matching standard pattern)"
-    state_code = gstin[:2]
-    if state_code not in STATE_CODES:
-        return False, f"Invalid State Code '{state_code}' in GSTIN '{gstin}'"
-
-    # Verify Mod-36 Checksum
-    expected_check = compute_gstin_checksum(gstin[:14])
-    if gstin[14] != expected_check:
-        return False, f"GSTIN checksum mismatch for '{gstin}': expected check digit '{expected_check}', found '{gstin[14]}'"
-    return True, None
+    try:
+        validate_gstin_str(gstin)
+        return True, None
+    except (ValueError, TypeError) as e:
+        return False, str(e)
 
 
 class ValidationResult:

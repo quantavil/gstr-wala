@@ -954,41 +954,40 @@ def export_gstr1_from_invoices(
                 fp = f"{parts[1]}{parts[2]}"
                 break
 
+    inv_records = []
+    for inv in invoices:
+        raw_dt = inv.get("idt", inv.get("invoice_date"))
+        idt_str = raw_dt.strftime("%d-%m-%Y") if isinstance(raw_dt, datetime.date) else str(raw_dt or "")
+        inv_records.append({
+            "inum": str(inv.get("inum", inv.get("invoice_number", ""))),
+            "idt": idt_str,
+            "val": float(inv.get("doc_total", inv.get("invoice_value", 0.0))),
+            "pos": str(inv.get("pos", "")),
+            "ctin": str(inv.get("ctin", inv.get("buyer_gstin", ""))),
+            "rchrg": str(inv.get("rchrg", inv.get("rcm", "N"))),
+            "inv_typ": "R",
+            "items": [
+                {
+                    "num": idx + 1,
+                    "hsn_sc": str(it["hsn"]),
+                    "desc": str(it.get("desc", "")),
+                    "uqc": str(it.get("uqc", "OTH")),
+                    "qty": float(it.get("qty", 1.0)),
+                    "txval": float(it.get("taxable", 0.0)),
+                    "rt": float(it.get("tax_rate", it.get("rt", 0.0))),
+                    "iamt": float(it.get("igst", it.get("iamt", 0.0))),
+                    "camt": float(it.get("cgst", it.get("camt", 0.0))),
+                    "samt": float(it.get("sgst", it.get("samt", 0.0))),
+                    "csamt": float(it.get("csamt", 0.0)),
+                }
+                for idx, it in enumerate(inv.get("items", []))
+            ],
+        })
+
     canonical_data = {
         "gstin": taxpayer_info.get("gstin", ""),
         "fp": fp,
-        "invoices": [
-            {
-                "inum": inv.get("inum", inv.get("invoice_number", "")),
-                "idt": (
-                    inv.get("idt", inv.get("invoice_date")).strftime("%d-%m-%Y")
-                    if isinstance(inv.get("idt", inv.get("invoice_date")), datetime.date)
-                    else str(inv.get("idt", inv.get("invoice_date", "")))
-                ),
-                "val": inv.get("doc_total", inv.get("invoice_value", 0.0)),
-                "pos": inv.get("pos", ""),
-                "ctin": inv.get("ctin", inv.get("buyer_gstin", "")),
-                "rchrg": inv.get("rchrg", inv.get("rcm", "N")),
-                "inv_typ": "R",
-                "items": [
-                    {
-                        "num": idx + 1,
-                        "hsn_sc": it["hsn"],
-                        "desc": it.get("desc", ""),
-                        "uqc": it.get("uqc", "OTH"),
-                        "qty": it.get("qty", 1.0),
-                        "txval": it.get("taxable", 0.0),
-                        "rt": it.get("tax_rate", it.get("rt", 0.0)),
-                        "iamt": it.get("igst", it.get("iamt", 0.0)),
-                        "camt": it.get("cgst", it.get("camt", 0.0)),
-                        "samt": it.get("sgst", it.get("samt", 0.0)),
-                        "csamt": it.get("csamt", 0.0),
-                    }
-                    for idx, it in enumerate(inv.get("items", []))
-                ],
-            }
-            for inv in invoices
-        ],
+        "invoices": inv_records,
     }
     from scripts.generate_gstr1_json import generate_portal_gstr1
     portal_json = generate_portal_gstr1(canonical_data, omit_empty=True)

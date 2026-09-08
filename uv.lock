@@ -434,7 +434,6 @@ source = { editable = "." }
 dependencies = [
     { name = "jinja2" },
     { name = "jsonschema" },
-    { name = "pillow" },
     { name = "polars" },
     { name = "pydantic" },
     { name = "pymupdf" },
@@ -473,7 +472,6 @@ requires-dist = [
     { name = "jsonschema", specifier = ">=4.21" },
     { name = "mypy", marker = "extra == 'all'", specifier = ">=1.10.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.10.0" },
-    { name = "pillow", specifier = ">=10.0.0" },
     { name = "polars", specifier = ">=1.0.0" },
     { name = "pydantic", specifier = ">=2.5.0" },
     { name = "pymupdf", specifier = ">=1.28.2" },
