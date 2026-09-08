@@ -1,0 +1,22 @@
+{
+  "name": "gstr-wala",
+  "version": "1.0.0",
+  "description": "High-performance GST offline tool serialization and validation powered by Bun and Python",
+  "type": "module",
+  "main": "scripts/gstr_offline_runner.ts",
+  "scripts": {
+    "gstr1:generate": "bun run scripts/gstr_offline_runner.ts generate",
+    "gstr1:validate": "bun run scripts/gstr_offline_runner.ts validate",
+    "test": "bun test"
+  },
+  "keywords": [
+    "gst",
+    "gstr1",
+    "gstr3b",
+    "gstin",
+    "offline-tool",
+    "bun"
+  ],
+  "author": "quantavil",
+  "license": "GPL-3.0-or-later"
+}

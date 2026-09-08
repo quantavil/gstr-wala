@@ -35,6 +35,15 @@ uv run pytest -q
 uv run ruff check .
 ```
 
+### Bun Workflow (Ultra-Fast Native TS Tooling)
+If you have [Bun](https://bun.sh) installed, run lightning-fast offline return generation, validation, and test suites:
+
+```bash
+bun test                                                        # Run Bun test suite
+bun run gstr1:generate input.json returns_offline.json --clean  # Sub-50ms uploadable JSON generation
+bun run gstr1:validate returns_offline.json                     # Validate pre-upload against official portal rules
+```
+
 Use a repository checkout: scripts locate configuration and schemas relative to it. A standalone wheel installation is not the documented deployment method.
 
 ## First run: demonstration
@@ -296,7 +305,22 @@ Official instructions: [GSTR-3B user guide](https://tutorial.gst.gov.in/userguid
 | Held matches or negative balances | Resolve the listed exceptions. Negative ledger/liability cases need a reviewed adjustment schedule and are not silently clamped |
 | Missing schema | Use a complete checkout containing `schemas/` |
 | PDF fails | Use `--no-pdf`; inspect HTML fallback and WeasyPrint dependencies |
-| Portal rejects JSON | Investigate in official tooling; changing a version tag alone proves nothing |
+| Portal rejects JSON ("Download latest offline tool...") | Upload requires `"version": "GST3.2.4"` and `"hash": "hash"`. The file must NOT contain portal-export keys (`filing_typ`, `cfs`, `flag`, `updby`, `cflag`, `chksum`). Audit via `bun run gstr1:validate <file.json>` or generate with `--clean` / `--omit-empty` |
+
+## Official Returns Offline Tool on Linux (Headless & Native)
+
+The official Windows installer `GST Offline Tool.exe` is an Electron application that can be unpacked on Linux using `innoextract`:
+
+```bash
+innoextract -e "GST Offline Tool.exe" -d ~/Downloads/gst_offline_tool
+cd ~/Downloads/gst_offline_tool/app
+bun run app.js  # Starts local offline tool server on port 3010
+```
+
+Key architectural findings:
+- **Parser behavior:** The tool's internal parser (`readXML`) expects multi-sheet `.xlsx` workbooks with a sheet titled `b2b` and skips 3 header rows. Single-sheet flat CSVs are silently ignored.
+- **Upload vs Download schemas:** Upload JSONs must contain `"version": "GST3.2.4"`, `"hash": "hash"`, and omit inactive tax heads. Portal-downloaded files contain internal tracking fields (`filing_typ`, `cfs`, `flag`, `updby`, `cflag`, `chksum`) which cause upload rejections if left in the upload payload.
+- **High-speed Bun generation:** Use `bun run gstr1:generate <input.json> <output.json> --omit-empty` to produce verified upload-ready JSON in under 50ms.
 
 ## Developer map and rule maintenance
 

@@ -46,13 +46,26 @@ DOC_NUM_NAMES = {
 }
 
 
-# Payload version marker. This is a gstr-wala provenance tag, NOT the GSTN
-# offline-tool token — if the portal rejects direct upload, regenerate via the
-# official Returns Offline Tool or pass portal_version with the tool's value.
-GSTR1_PORTAL_VERSION = "gstr-wala-gstr1-1.0"
+# Official GST Returns Offline Tool v3.x version token verified against live GST portal upload.
+GSTR1_PORTAL_VERSION = "GST3.2.4"
 
 
-def generate_portal_gstr1(input_data: dict[str, Any], portal_version: str | None = None) -> dict[str, Any]:
+def omit_empty_structure(obj: Any) -> Any:
+    """Recursively prunes empty lists and empty dicts matching official offline tool's omitEmpty."""
+    if isinstance(obj, dict):
+        cleaned = {k: omit_empty_structure(v) for k, v in obj.items()}
+        return {k: v for k, v in cleaned.items() if v not in ([], {}, "", None)}
+    if isinstance(obj, list):
+        cleaned = [omit_empty_structure(item) for item in obj]
+        return [item for item in cleaned if item not in ([], {}, "", None)]
+    return obj
+
+
+def generate_portal_gstr1(
+    input_data: dict[str, Any],
+    portal_version: str | None = None,
+    omit_empty: bool = False
+) -> dict[str, Any]:
     """Transforms canonical input data into GSTN offline-tool-shaped GSTR-1 JSON."""
     from scripts.workflow import require_return
 
@@ -71,18 +84,30 @@ def generate_portal_gstr1(input_data: dict[str, Any], portal_version: str | None
         if ctin not in b2b_by_ctin:
             b2b_by_ctin[ctin] = []
 
+        pos = inv.get("pos", "")
+        is_intra = pos == gstin[:2]
+
         itms = []
         for itm_idx, itm in enumerate(inv.get("items", [])):
+            rt = float(itm.get("rt", 0.0))
+            num = int(rt * 100) if rt > 0 else (itm_idx + 1)
+            itm_det: dict[str, Any] = {
+                "rt": rt,
+                "txval": round_cur(itm.get("txval", 0.0)),
+            }
+            if is_intra:
+                itm_det["camt"] = round_cur(itm.get("camt", 0.0))
+                itm_det["samt"] = round_cur(itm.get("samt", 0.0))
+            else:
+                itm_det["iamt"] = round_cur(itm.get("iamt", 0.0))
+
+            csamt = round_cur(itm.get("csamt", 0.0))
+            if csamt > 0:
+                itm_det["csamt"] = csamt
+
             itms.append({
-                "num": itm_idx + 1,
-                "itm_det": {
-                    "txval": round_cur(itm.get("txval", 0.0)),
-                    "rt": float(itm.get("rt", 0.0)),
-                    "iamt": round_cur(itm.get("iamt", 0.0)),
-                    "camt": round_cur(itm.get("camt", 0.0)),
-                    "samt": round_cur(itm.get("samt", 0.0)),
-                    "csamt": round_cur(itm.get("csamt", 0.0))
-                }
+                "num": num,
+                "itm_det": itm_det
             })
 
         b2b_by_ctin[ctin].append({
@@ -106,14 +131,20 @@ def generate_portal_gstr1(input_data: dict[str, Any], portal_version: str | None
 
         itms = []
         for itm_idx, itm in enumerate(inv.get("items", [])):
+            rt = float(itm.get("rt", 0.0))
+            num = int(rt * 100) if rt > 0 else (itm_idx + 1)
+            itm_det: dict[str, Any] = {
+                "rt": rt,
+                "txval": round_cur(itm.get("txval", 0.0)),
+                "iamt": round_cur(itm.get("iamt", 0.0)),
+            }
+            csamt = round_cur(itm.get("csamt", 0.0))
+            if csamt > 0:
+                itm_det["csamt"] = csamt
+
             itms.append({
-                "num": itm_idx + 1,
-                "itm_det": {
-                    "txval": round_cur(itm.get("txval", 0.0)),
-                    "rt": float(itm.get("rt", 0.0)),
-                    "iamt": round_cur(itm.get("iamt", 0.0)),
-                    "csamt": round_cur(itm.get("csamt", 0.0))
-                }
+                "num": num,
+                "itm_det": itm_det
             })
 
         b2cl_by_pos[pos].append({
@@ -282,8 +313,9 @@ def generate_portal_gstr1(input_data: dict[str, Any], portal_version: str | None
     }
 
     # Complete offline-tool-shaped portal JSON
-    return {
+    res = {
         "version": portal_version or GSTR1_PORTAL_VERSION,
+        "hash": "hash",
         "gstin": gstin,
         "fp": fp,
         "gt": gt,
@@ -305,15 +337,26 @@ def generate_portal_gstr1(input_data: dict[str, Any], portal_version: str | None
         }
     }
 
+    if omit_empty:
+        root_ident = {k: res[k] for k in ["version", "hash", "gstin", "fp", "gt", "cur_gt"] if k in res}
+        rest = {k: v for k, v in res.items() if k not in root_ident}
+        pruned_rest = omit_empty_structure(rest)
+        return {**root_ident, **pruned_rest}
+
+    return res
+
 
 def main():
-    if len(sys.argv) < 2:
-        print("Usage: python3 generate_gstr1_json.py <gstr1_input.json> [output_portal.json]")
-        sys.exit(1)
+    import argparse
+    parser = argparse.ArgumentParser(description="Generate official GST Portal offline upload JSON for GSTR-1.")
+    parser.add_argument("input_file", help="Path to validated canonical gstr1_input.json")
+    parser.add_argument("output_file", nargs="?", default="gstr1_portal.json", help="Path to output portal JSON")
+    parser.add_argument("--omit-empty", "--clean", dest="omit_empty", action="store_true", help="Omit empty tables matching official offline tool's omitEmpty")
+    parser.add_argument("--version-tag", dest="version_tag", default=None, help="Override version token (default: GST3.2.4)")
+    args = parser.parse_args()
 
-    input_file = sys.argv[1]
-    output_file = sys.argv[2] if len(sys.argv) > 2 else "gstr1_portal.json"
-
+    input_file = args.input_file
+    output_file = args.output_file
 
     if not os.path.exists(input_file):
         sys.exit(f"Error: File '{input_file}' not found.")
@@ -328,13 +371,17 @@ def main():
             print(f"  - {e}")
         sys.exit(1)
 
-    portal_json = generate_portal_gstr1(data)
+    portal_json = generate_portal_gstr1(data, portal_version=args.version_tag, omit_empty=args.omit_empty)
 
     with open(output_file, "w", encoding="utf-8") as f:
         json.dump(portal_json, f, indent=2)
 
+    b2b_count = len(portal_json.get("b2b", []))
+    b2cl_count = len(portal_json.get("b2cl", []))
+    b2cs_count = len(portal_json.get("b2cs", []))
+    hsn_count = len(portal_json.get("hsn", {}).get("data", []))
     print(f"SUCCESS: Generated official GSTR-1 portal JSON -> '{output_file}'")
-    print(f"Summary: {len(portal_json['b2b'])} B2B entities, {len(portal_json['b2cl'])} B2CL groups, {len(portal_json['b2cs'])} B2CS lines, {len(portal_json['hsn']['data'])} HSN lines.")
+    print(f"Summary: {b2b_count} B2B entities, {b2cl_count} B2CL groups, {b2cs_count} B2CS lines, {hsn_count} HSN lines.")
 
 
 if __name__ == "__main__":

@@ -24,7 +24,7 @@ from scripts.generate_filing_pack import (
     generate_reconciliation_report,
     validate_against_schema,
 )
-from scripts.generate_gstr1_json import generate_portal_gstr1
+from scripts.generate_gstr1_json import GSTR1_PORTAL_VERSION, generate_portal_gstr1
 from scripts.generate_gstr3b_json import generate_portal_gstr3b
 from scripts.generate_pdf_statement import generate_pdf
 from scripts.gst_engine import compute_statutory_interest
@@ -46,7 +46,7 @@ class TestSchemaEnforcement:
         with open(sales_path, encoding="utf-8") as f:
             data = json.load(f)
         portal_payload = generate_portal_gstr1(data)
-        assert portal_payload.get("version") == "gstr-wala-gstr1-1.0"
+        assert portal_payload.get("version") == GSTR1_PORTAL_VERSION
         errs = validate_against_schema(portal_payload, G1_SCHEMA_PATH)
         assert errs == [], f"GSTR-1 schema errors: {errs}"
 
