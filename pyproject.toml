@@ -24,6 +24,7 @@ dependencies = [
     "pillow>=10.0.0",
     "pymupdf>=1.28.2",
     "jsonschema>=4.21",
+    "xlsxwriter>=3.2.9",
 ]
 
 [project.scripts]
@@ -74,6 +75,7 @@ module = [
     "pymupdf.*",
     "python_calamine.*",
     "jsonschema.*",
+    "xlsxwriter.*",
 ]
 ignore_missing_imports = true
 

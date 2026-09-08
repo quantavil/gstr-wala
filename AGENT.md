@@ -11,6 +11,9 @@
 
 
 ## Blunder Log (Root Cause + Fix)
+- **2026-09-08:** XlsxWriter formula value caching: Omitting value parameter in write_formula() causes external readers and Calamine to see 0.0; always pass pre-computed value argument.
+- **2026-09-08:** Invoice round-off regex parsing: Parenthesized signs like `(+) 0.20` or `(-) 0.38` fail standard `[+-]?` regex; use `(?:\(([+\-])\)|([+\-]))?\s*([\d\.]+)` with explicit sign handling.
+- **2026-09-08:** PyMuPDF text block order: Unsorted get_text() in PDF layout extraction can cause party names to transpose with labels; strictly use get_text('text', sort=True) or table extraction.
 - **2026-09-08:** GST Portal offline upload validation root cause: Portal validator strictly requires `"version": "GST3.2.4"` and `"hash": "hash"`, and rejects portal-download fields (`filing_typ`, `cfs`, `flag`, `updby`, `cflag`, `chksum`).
 - **2026-09-08:** Official `GST Offline Tool.exe` reverse-engineering: App unpacked via `innoextract` is Electron/Node; `readXML` assumes multi-sheet `.xlsx` (`b2b` sheet, skips 3 rows), causing flat CSVs to be silently dropped.
 - **2026-09-08:** GSTR-1 item numbering and inactive tax heads: Official tool sets `num = int(rt * 100)` (e.g. 1800, 500) and prunes inactive zero-tax heads (`iamt` on intra, `camt`/`samt` on inter, `csamt` when 0) before `omitEmpty`.
@@ -43,7 +46,8 @@
 - `scripts/generate_filing_pack.py`: Audit-ready Markdown CA filing pack generator.
 - `scripts/generate_pdf_statement.py`: Jinja2 + WeasyPrint certified CA statement generator.
 - `scripts/gstr_offline_runner.ts`: Bun-native high-performance official GSTR-1 offline JSON generator and validator.
+- `scripts/generate_sales_register.py`: Audit-ready 4-sheet Excel sales register generator with Executive Dashboard, Master Invoices, Itemized Details, and Table 12 HSN (XlsxWriter).
 - `scripts/discover_statutory_rules.py`: Live statutory compliance discovery radar.
 - `scripts/compliance_radar.py`: Self-updating statutory rule engine.
-- `tests/`: 272 Pytest unit, integration, property (Hypothesis), contract, and fuzz tests (100% pass via `uv run pytest`).
+- `tests/`: 276 Pytest unit, integration, property (Hypothesis), contract, and fuzz tests (100% pass via `uv run pytest`).
 

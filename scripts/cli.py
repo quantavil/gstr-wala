@@ -35,6 +35,7 @@ from scripts.generate_filing_pack import (
 from scripts.generate_gstr1_json import generate_portal_gstr1
 from scripts.generate_gstr3b_json import generate_portal_gstr3b
 from scripts.generate_pdf_statement import generate_pdf
+from scripts.generate_sales_register import build_sales_register_excel, extract_invoices_from_pdf_dir
 from scripts.gst_engine import compute_gstr1_tables
 from scripts.ingest_pdf_vision import batch_convert_all_documents
 from scripts.reconcile_fast import reconcile_polars_rapidfuzz
@@ -311,6 +312,24 @@ def report(
     with open(gstr3b_input, encoding="utf-8") as f:
         data = json.load(f)
     generate_pdf(data, output_pdf)
+
+
+@app.command(name="sales-register")
+def sales_register(
+    invoices_dir: str = typer.Argument(..., help="Path to directory containing PDF invoices"),
+    output: str = typer.Option("output/sales_register.xlsx", "--output", "-o", help="Output Excel workbook path (.xlsx)"),
+    gstr1: str = typer.Option(None, "--gstr1", "-g", help="Optional companion gstr1_input.json path"),
+) -> None:
+    """Generates an audit-ready, executive 4-sheet Sales Register Excel workbook (.xlsx)."""
+    console.print(Panel.fit(
+        "[bold green]gstr-wala[/bold green] [cyan]• Audit Sales Register Generator[/cyan]\n"
+        "[dim]Multi-item extraction • Dynamic formulas • Table 12 HSN alignment • CA review ready[/dim]",
+        border_style="green",
+    ))
+    console.print(f"Extracting invoices from [cyan]{invoices_dir}[/cyan]...")
+    taxpayer_info, invoices = extract_invoices_from_pdf_dir(invoices_dir, gstr1)
+    res_path = build_sales_register_excel(taxpayer_info, invoices, output)
+    console.print(f"[bold green]✓ Generated 4-sheet Sales Register workbook:[/bold green] [cyan]{res_path}[/cyan] ([bold]{len(invoices)}[/bold] invoices)")
 
 
 if __name__ == "__main__":

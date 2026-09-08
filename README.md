@@ -1,6 +1,6 @@
 # gstr-wala
 
-Local Python tools for preparing GSTR-1, reconciling purchases with GSTR-2B, drafting GSTR-3B, and estimating ITC set-off and cash requirements. Includes an optional AI-agent workflow in [SKILL.md](SKILL.md).
+Local Python tools for preparing GSTR-1, reconciling purchases with GSTR-2B, drafting GSTR-3B, estimating ITC set-off and cash requirements, and generating audit-ready 4-sheet Sales Register Excel workbooks. Includes an optional AI-agent workflow in [SKILL.md](SKILL.md).
 
 **Status: preparation tool requiring CA review.** The engine prepares a draft and one consolidated exception list for professional review. [HARDENING.md](HARDENING.md) lists implemented corrections and remaining scope limits. A generated statement is a computation draft, not a CA certification. A measured 95–99% automation/accuracy claim has not yet been established against independent CA-approved returns.
 
@@ -230,6 +230,7 @@ Approval records review of the existing figures; it does not resolve a mismatch 
 | `gstr1_filing_pack.md` | Outward, HSN and document summaries |
 | `gstr3b_filing_pack.md` | 3B, set-off and cash-deposit computation |
 | `gstr3b_statement.pdf` | Optional printable draft; HTML fallback may be produced |
+| `sales_register.xlsx` | Audit-ready 4-sheet Excel register (Dashboard, Master Invoices, Itemized Lines, Table 12 HSN) |
 
 Cash/challan output is an estimate, not an actual PMT-06 challan or payment. DRC messages are internal comparisons, not guarantees against notices. The pipeline stages its outputs and removes the staged run on failure. Standalone scripts do not share directory-level publication: use fresh paths and validate their output.
 
@@ -278,6 +279,21 @@ uv run gstr-wala ingest-pdf docs/invoices/ --output-dir work/images/ --dpi 200
 # Add --force-image to render digitally readable pages too.
 uv run gstr-wala report REVIEWED_3B.json output/gstr3b_statement.pdf
 ```
+
+### Audit-Grade Sales Register (Excel)
+
+Generate an audit-ready, executive 4-sheet Sales Register Excel workbook directly from a folder of digital PDF invoices (with optional companion `gstr1_input.json`):
+
+```bash
+uv run gstr-wala sales-register /path/to/invoices/ --output output/sales_register.xlsx
+```
+
+Features:
+- **Executive Dashboard:** 4 KPI summary cards (Gross Turnover, Taxable Value, Total Tax, Invoice Count), statutory tax head split (IGST/CGST/SGST), GSTR-1 return reconciliation table (B2B, B2C, SEZ, Exports), and Top 5 Clients by turnover.
+- **Sales Register:** Master invoice register with invoice number, date (native Excel date `dd/mm/yyyy`), buyer name, GSTIN, POS, Supply Type, RCM flag, Taxable Value, CGST, SGST, IGST, Total Tax, Round Off, and Gross Total with live dynamic `=SUM()` formulas and pre-computed cached values.
+- **Itemized Details:** Granular multi-item breakdown (rates, currencies, exchange rates, quantities, UQC, and item-level taxes).
+- **HSN-SAC Summary:** Table 12-aligned statutory aggregation grouped by HSN/SAC code and GST rate with official descriptions.
+- **Formatting:** Built with `XlsxWriter` using corporate typography, freeze panes, auto-fit column widths, explicit Indian number formatting (`₹#,##0.00`), zebra striping, and visual status badges.
 
 PDF ingestion prepares text/images, not complete accounting records. Retain page references when extracting manually. [SKILL.md](SKILL.md) provides an optional agent workflow, subject to this README's known limitations.
 
