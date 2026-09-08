@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 from typing import Any
@@ -183,3 +184,32 @@ def test_cli_sales_register_command(tmp_path: Path) -> None:
     assert result.exit_code == 0
     assert "Generated 4-sheet Sales Register workbook" in result.stdout
     assert out_xlsx.exists()
+
+
+def test_cli_sales_register_with_export_gstr1(tmp_path: Path) -> None:
+    """Verifies that sales-register with --export-gstr1 generates clean uploadable JSON without intermediate bloat."""
+    invoices_dir = Path("/home/quantavil/Documents/Invoices/2026-08/invoices")
+    if not invoices_dir.exists():
+        pytest.skip("Invoices test directory not found")
+
+    out_xlsx = tmp_path / "cli_sales_register.xlsx"
+    out_g1 = tmp_path / "gstr1_portal.json"
+    result = runner.invoke(
+        app,
+        [
+            "sales-register",
+            str(invoices_dir),
+            "--output",
+            str(out_xlsx),
+            "--export-gstr1",
+            str(out_g1),
+        ],
+    )
+    assert result.exit_code == 0
+    assert out_xlsx.exists()
+    assert out_g1.exists()
+    g1_data = json.loads(out_g1.read_text())
+    assert g1_data["version"] == "GST3.2.4"
+    assert "b2b" in g1_data
+    assert "b2cl" not in g1_data
+

@@ -46,8 +46,8 @@
 - `scripts/generate_filing_pack.py`: Audit-ready Markdown CA filing pack generator.
 - `scripts/generate_pdf_statement.py`: Jinja2 + WeasyPrint certified CA statement generator.
 - `scripts/gstr_offline_runner.ts`: Bun-native high-performance official GSTR-1 offline JSON generator and validator.
-- `scripts/generate_sales_register.py`: Audit-ready 4-sheet Excel sales register generator with Executive Dashboard, Master Invoices, Itemized Details, and Table 12 HSN (XlsxWriter).
+- `scripts/generate_sales_register.py`: Audit-ready 4-sheet Excel sales register generator with Executive Dashboard, Master Invoices, Itemized Details, Table 12 HSN (XlsxWriter), and direct upload-ready GSTR-1 export.
 - `scripts/discover_statutory_rules.py`: Live statutory compliance discovery radar.
 - `scripts/compliance_radar.py`: Self-updating statutory rule engine.
-- `tests/`: 276 Pytest unit, integration, property (Hypothesis), contract, and fuzz tests (100% pass via `uv run pytest`).
+- `tests/`: 277 Pytest unit, integration, property (Hypothesis), contract, and fuzz tests (100% pass via `uv run pytest`).
 

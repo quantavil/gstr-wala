@@ -936,16 +936,84 @@ def build_sales_register_excel(
     return str(out_file)
 
 
+def export_gstr1_from_invoices(
+    taxpayer_info: dict[str, str],
+    invoices: list[dict[str, Any]],
+    output_portal_path: str,
+) -> str:
+    """Exports clean, upload-ready GSTR-1 offline portal JSON directly from extracted invoices in-memory."""
+    fp = taxpayer_info.get("fp", "082026")
+    for inv in invoices:
+        d = inv.get("idt", inv.get("invoice_date"))
+        if isinstance(d, datetime.date):
+            fp = d.strftime("%m%Y")
+            break
+        elif isinstance(d, str) and len(d) >= 10:
+            parts = d.replace("/", "-").split("-")
+            if len(parts) == 3:
+                fp = f"{parts[1]}{parts[2]}"
+                break
+
+    canonical_data = {
+        "gstin": taxpayer_info.get("gstin", ""),
+        "fp": fp,
+        "invoices": [
+            {
+                "inum": inv.get("inum", inv.get("invoice_number", "")),
+                "idt": (
+                    inv.get("idt", inv.get("invoice_date")).strftime("%d-%m-%Y")
+                    if isinstance(inv.get("idt", inv.get("invoice_date")), datetime.date)
+                    else str(inv.get("idt", inv.get("invoice_date", "")))
+                ),
+                "val": inv.get("doc_total", inv.get("invoice_value", 0.0)),
+                "pos": inv.get("pos", ""),
+                "ctin": inv.get("ctin", inv.get("buyer_gstin", "")),
+                "rchrg": inv.get("rchrg", inv.get("rcm", "N")),
+                "inv_typ": "R",
+                "items": [
+                    {
+                        "num": idx + 1,
+                        "hsn_sc": it["hsn"],
+                        "desc": it.get("desc", ""),
+                        "uqc": it.get("uqc", "OTH"),
+                        "qty": it.get("qty", 1.0),
+                        "txval": it.get("taxable", 0.0),
+                        "rt": it.get("tax_rate", it.get("rt", 0.0)),
+                        "iamt": it.get("igst", it.get("iamt", 0.0)),
+                        "camt": it.get("cgst", it.get("camt", 0.0)),
+                        "samt": it.get("sgst", it.get("samt", 0.0)),
+                        "csamt": it.get("csamt", 0.0),
+                    }
+                    for idx, it in enumerate(inv.get("items", []))
+                ],
+            }
+            for inv in invoices
+        ],
+    }
+    from scripts.generate_gstr1_json import generate_portal_gstr1
+    portal_json = generate_portal_gstr1(canonical_data, omit_empty=True)
+    out_dir = os.path.dirname(output_portal_path)
+    if out_dir:
+        os.makedirs(out_dir, exist_ok=True)
+    with open(output_portal_path, "w", encoding="utf-8") as f:
+        json.dump(portal_json, f, indent=2)
+    return output_portal_path
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("invoices_dir", type=str, help="Directory containing invoice PDFs")
     parser.add_argument("--output", "-o", type=str, default="output/sales_register.xlsx", help="Output Excel path")
     parser.add_argument("--gstr1", "-g", type=str, default=None, help="Path to gstr1_input.json")
+    parser.add_argument("--export-gstr1", type=str, default=None, help="Optional path to export clean upload-ready GSTR-1 JSON directly")
     args = parser.parse_args()
 
     taxpayer_info, invoices = extract_invoices_from_pdf_dir(args.invoices_dir, args.gstr1)
     res_path = build_sales_register_excel(taxpayer_info, invoices, args.output)
     print(f"Generated Sales Register workbook: {res_path} ({len(invoices)} invoices)")
+    if args.export_gstr1:
+        g1_path = export_gstr1_from_invoices(taxpayer_info, invoices, args.export_gstr1)
+        print(f"Exported upload-ready GSTR-1 JSON: {g1_path}")
 
 
 if __name__ == "__main__":

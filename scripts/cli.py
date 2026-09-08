@@ -35,7 +35,11 @@ from scripts.generate_filing_pack import (
 from scripts.generate_gstr1_json import generate_portal_gstr1
 from scripts.generate_gstr3b_json import generate_portal_gstr3b
 from scripts.generate_pdf_statement import generate_pdf
-from scripts.generate_sales_register import build_sales_register_excel, extract_invoices_from_pdf_dir
+from scripts.generate_sales_register import (
+    build_sales_register_excel,
+    export_gstr1_from_invoices,
+    extract_invoices_from_pdf_dir,
+)
 from scripts.gst_engine import compute_gstr1_tables
 from scripts.ingest_pdf_vision import batch_convert_all_documents
 from scripts.reconcile_fast import reconcile_polars_rapidfuzz
@@ -113,7 +117,7 @@ def pipeline(
 
     # 3. Generate GSTR-1 Portal JSON
     console.print("\n[bold yellow]Step 3/6:[/bold yellow] Computing GSTR-1 & Generating Offline Portal JSON...")
-    g1_portal = generate_portal_gstr1(g1_data)
+    g1_portal = generate_portal_gstr1(g1_data, omit_empty=True)
     g1_out = os.path.join(output_dir, "gstr1_portal.json")
     with open(g1_out, "w", encoding="utf-8") as f:
         json.dump(g1_portal, f, indent=2)
@@ -319,6 +323,7 @@ def sales_register(
     invoices_dir: str = typer.Argument(..., help="Path to directory containing PDF invoices"),
     output: str = typer.Option("output/sales_register.xlsx", "--output", "-o", help="Output Excel workbook path (.xlsx)"),
     gstr1: str = typer.Option(None, "--gstr1", "-g", help="Optional companion gstr1_input.json path"),
+    export_gstr1: str = typer.Option(None, "--export-gstr1", help="Optional path to directly export clean upload-ready GSTR-1 JSON"),
 ) -> None:
     """Generates an audit-ready, executive 4-sheet Sales Register Excel workbook (.xlsx)."""
     console.print(Panel.fit(
@@ -330,6 +335,9 @@ def sales_register(
     taxpayer_info, invoices = extract_invoices_from_pdf_dir(invoices_dir, gstr1)
     res_path = build_sales_register_excel(taxpayer_info, invoices, output)
     console.print(f"[bold green]✓ Generated 4-sheet Sales Register workbook:[/bold green] [cyan]{res_path}[/cyan] ([bold]{len(invoices)}[/bold] invoices)")
+    if export_gstr1:
+        g1_path = export_gstr1_from_invoices(taxpayer_info, invoices, export_gstr1)
+        console.print(f"[bold green]✓ Exported upload-ready GSTR-1 JSON:[/bold green] [cyan]{g1_path}[/cyan]")
 
 
 if __name__ == "__main__":
